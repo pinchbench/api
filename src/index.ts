@@ -11,11 +11,20 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use(
   "/api/*",
   cors({
-    origin: ["https://pinchbench.com", "http://localhost:3000", "http://localhost:5173"],
+    origin: [
+      "https://pinchbench.com",
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "null",
+    ],
     allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["Content-Type", "X-PinchBench-Token", "X-PinchBench-Version"],
+    allowHeaders: [
+      "Content-Type",
+      "X-PinchBench-Token",
+      "X-PinchBench-Version",
+    ],
     maxAge: 86400,
-  })
+  }),
 );
 
 app.get("/", (c) => {
