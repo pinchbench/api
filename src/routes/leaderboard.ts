@@ -33,10 +33,12 @@ const getAuthToken = (c: {
   req: { header: (name: string) => string | undefined };
 }) => c.req.header("X-PinchBench-Token")?.trim();
 
-export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => {
+export const registerLeaderboardRoutes = (
+  app: Hono<{ Bindings: Bindings }>,
+) => {
   /**
    * GET /api/leaderboard
-   * 
+   *
    * Returns aggregated best scores grouped by model.
    * Query params:
    *   - verified: "true" to only include submissions from claimed tokens
@@ -45,6 +47,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
    */
   app.get("/api/leaderboard", async (c) => {
     const verified = c.req.query("verified") === "true";
+    const verifiedFlag = verified ? 1 : 0;
     const providerFilter = c.req.query("provider")?.trim();
     const limitParam = parseInt(c.req.query("limit") ?? "50", 10);
     const limit = Math.min(Math.max(1, limitParam), 200);
@@ -61,20 +64,16 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
           FROM submissions s2 
           JOIN tokens t2 ON s2.token_id = t2.id
           WHERE s2.model = s.model 
-            AND s2.score_percentage = MAX(s.score_percentage)
-            ${verified ? "AND t2.claimed_at IS NOT NULL" : ""}
+            AND (? = 0 OR t2.claimed_at IS NOT NULL)
+          ORDER BY s2.score_percentage DESC, s2.timestamp DESC, s2.id ASC
           LIMIT 1
         ) as best_submission_id
       FROM submissions s
       JOIN tokens t ON s.token_id = t.id
-      WHERE 1=1
+      WHERE (? = 0 OR t.claimed_at IS NOT NULL)
     `;
 
-    const bindings: (string | number)[] = [];
-
-    if (verified) {
-      query += " AND t.claimed_at IS NOT NULL";
-    }
+    const bindings: (string | number)[] = [verifiedFlag, verifiedFlag];
 
     if (providerFilter) {
       query += " AND s.provider = ?";
@@ -97,7 +96,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
       .prepare(
         verified
           ? "SELECT COUNT(DISTINCT s.model) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL"
-          : "SELECT COUNT(DISTINCT model) as count FROM submissions"
+          : "SELECT COUNT(DISTINCT model) as count FROM submissions",
       )
       .first<{ count: number }>();
 
@@ -111,7 +110,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
 
   /**
    * GET /api/submissions
-   * 
+   *
    * Returns a paginated list of submissions.
    * Query params:
    *   - model: filter by model name
@@ -192,7 +191,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
       JOIN tokens t ON s.token_id = t.id
       WHERE 1=1
     `;
-    const countBindings: string[] = [];
+    const countBindings: (string | number)[] = [];
 
     if (model) {
       countQuery += " AND s.model = ?";
@@ -222,7 +221,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
 
   /**
    * GET /api/submissions/:id
-   * 
+   *
    * Returns full details for a single submission including task breakdown.
    */
   app.get("/api/submissions/:id", async (c) => {
@@ -230,8 +229,12 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
 
     if (!submissionId) {
       return c.json(
-        { status: "error", error: "bad_request", message: "Submission ID required" },
-        400
+        {
+          status: "error",
+          error: "bad_request",
+          message: "Submission ID required",
+        },
+        400,
       );
     }
 
@@ -256,22 +259,26 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
         FROM submissions s
         JOIN tokens t ON s.token_id = t.id
         WHERE s.id = ?
-        LIMIT 1`
+        LIMIT 1`,
       )
       .bind(submissionId)
       .first<SubmissionRow>();
 
     if (!row) {
       return c.json(
-        { status: "error", error: "not_found", message: "Submission not found" },
-        404
+        {
+          status: "error",
+          error: "not_found",
+          message: "Submission not found",
+        },
+        404,
       );
     }
 
     // Calculate rank
     const rankRow = await c.env.prod_pinchbench
       .prepare(
-        "SELECT COUNT(*) + 1 as rank FROM submissions WHERE score_percentage > ?"
+        "SELECT COUNT(DISTINCT score_percentage) + 1 as rank FROM submissions WHERE score_percentage > ?",
       )
       .bind(row.score_percentage)
       .first<{ rank: number }>();
@@ -279,6 +286,34 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
     const totalRow = await c.env.prod_pinchbench
       .prepare("SELECT COUNT(*) as total FROM submissions")
       .first<{ total: number }>();
+
+    let tasks: SubmissionRow["tasks"] | unknown[] = [];
+    let usageSummary: SubmissionRow["usage_summary"] | null = null;
+    let metadata: SubmissionRow["metadata"] | null = null;
+
+    try {
+      tasks = JSON.parse(row.tasks || "[]");
+    } catch (error) {
+      console.error(`Failed to parse tasks for submission ${row.id}:`, error);
+    }
+
+    try {
+      usageSummary = row.usage_summary ? JSON.parse(row.usage_summary) : null;
+    } catch (error) {
+      console.error(
+        `Failed to parse usage_summary for submission ${row.id}:`,
+        error,
+      );
+    }
+
+    try {
+      metadata = row.metadata ? JSON.parse(row.metadata) : null;
+    } catch (error) {
+      console.error(
+        `Failed to parse metadata for submission ${row.id}:`,
+        error,
+      );
+    }
 
     return c.json({
       submission: {
@@ -293,9 +328,9 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
         client_version: row.client_version,
         openclaw_version: row.openclaw_version,
         run_id: row.run_id,
-        tasks: JSON.parse(row.tasks || "[]"),
-        usage_summary: row.usage_summary ? JSON.parse(row.usage_summary) : null,
-        metadata: row.metadata ? JSON.parse(row.metadata) : null,
+        tasks,
+        usage_summary: usageSummary,
+        metadata,
         verified: row.claimed === 1,
       },
       rank: rankRow?.rank ?? 0,
@@ -303,9 +338,10 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
       percentile:
         totalRow?.total && totalRow.total > 0
           ? Number(
-              (((totalRow.total - (rankRow?.rank ?? 0)) / totalRow.total) * 100).toFixed(
-                2
-              )
+              (
+                ((totalRow.total - (rankRow?.rank ?? 0)) / totalRow.total) *
+                100
+              ).toFixed(2),
             )
           : 0,
     });
@@ -313,7 +349,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
 
   /**
    * GET /api/models
-   * 
+   *
    * Returns list of all models with submission counts.
    * Useful for filter dropdowns in the frontend.
    */
@@ -349,7 +385,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
 
   /**
    * GET /api/me/submissions
-   * 
+   *
    * Returns submissions for the authenticated user's token.
    * Requires X-PinchBench-Token header.
    */
@@ -362,15 +398,21 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
           error: "unauthorized",
           message: "Authentication token required",
         },
-        401
+        401,
       );
     }
 
     const tokenHash = await hashToken(token);
     const tokenRow = await c.env.prod_pinchbench
-      .prepare("SELECT id, claimed_at, user_id FROM tokens WHERE token_hash = ? LIMIT 1")
+      .prepare(
+        "SELECT id, claimed_at, user_id FROM tokens WHERE token_hash = ? LIMIT 1",
+      )
       .bind(tokenHash)
-      .first<{ id: string; claimed_at: string | null; user_id: string | null }>();
+      .first<{
+        id: string;
+        claimed_at: string | null;
+        user_id: string | null;
+      }>();
 
     if (!tokenRow?.id) {
       return c.json(
@@ -379,7 +421,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
           error: "unauthorized",
           message: "Invalid authentication token",
         },
-        401
+        401,
       );
     }
 
@@ -403,7 +445,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
         FROM submissions
         WHERE token_id = ?
         ORDER BY timestamp DESC
-        LIMIT ? OFFSET ?`
+        LIMIT ? OFFSET ?`,
       )
       .bind(tokenRow.id, limit, offset)
       .all();
@@ -425,7 +467,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
 
   /**
    * GET /api/stats
-   * 
+   *
    * Returns aggregate statistics about the benchmark.
    */
   app.get("/api/stats", async (c) => {
@@ -439,12 +481,12 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
           .first<{ count: number }>(),
         c.env.prod_pinchbench
           .prepare(
-            "SELECT COUNT(*) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL"
+            "SELECT COUNT(*) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL",
           )
           .first<{ count: number }>(),
         c.env.prod_pinchbench
           .prepare(
-            "SELECT COUNT(*) as count FROM submissions WHERE created_at >= datetime('now', '-24 hours')"
+            "SELECT COUNT(*) as count FROM submissions WHERE created_at >= datetime('now', '-24 hours')",
           )
           .first<{ count: number }>(),
       ]);
@@ -456,7 +498,7 @@ export const registerLeaderboardRoutes = (app: Hono<{ Bindings: Bindings }>) => 
          FROM submissions
          GROUP BY model
          ORDER BY best_score DESC
-         LIMIT 1`
+         LIMIT 1`,
       )
       .first<{ model: string; best_score: number }>();
 
