@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PinchBench - AI Agent Benchmark Leaderboard</title>
+  <meta name="description" content="Compare how well different LLMs perform as the brain of an OpenClaw agent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --surface: #141416;
+      --surface-2: #1a1a1e;
+      --border: #2a2a2e;
+      --text: #fafafa;
+      --text-muted: #a0a0a0;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --warning: #eab308;
+      --gold: #fbbf24;
+      --silver: #94a3b8;
+      --bronze: #d97706;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem 0;
+    }
+
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+    }
+
+    .logo h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .logo span {
+      color: var(--accent);
+    }
+
+    .header-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .header-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    .header-links a:hover {
+      color: var(--text);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 4rem 0 3rem;
+      text-align: center;
+    }
+
+    .hero h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--text), var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      color: var(--text-muted);
+      font-size: 1.125rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin: 2rem 0 3rem;
+    }
+
+    @media (max-width: 768px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-top: 0.25rem;
+    }
+
+    /* Filters */
+    .filters {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .filter-group label {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    select, input[type="text"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      color: var(--text);
+      font-size: 0.875rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    select:focus, input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+
+    .toggle-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .toggle-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .toggle-btn:hover:not(.active) {
+      border-color: var(--text-muted);
+    }
+
+    /* Leaderboard Table */
+    .leaderboard-section {
+      margin-bottom: 4rem;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .section-header h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .table-wrapper {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      text-align: left;
+      padding: 1rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover {
+      background: var(--surface-2);
+    }
+
+    .rank-cell {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      width: 60px;
+    }
+
+    .rank-1 { color: var(--gold); }
+    .rank-2 { color: var(--silver); }
+    .rank-3 { color: var(--bronze); }
+
+    .model-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .model-name {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .model-provider {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .score-cell {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    .score-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .score-bar-bg {
+      flex: 1;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      max-width: 200px;
+    }
+
+    .score-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #8b5cf6);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .count-cell {
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+    }
+
+    .verified-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--success);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    /* Loading & Empty States */
+    .loading, .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-muted);
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      transform: translateY(20px);
+      transition: transform 0.2s;
+    }
+
+    .modal-overlay.open .modal {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+      padding: 0.25rem;
+    }
+
+    .modal-close:hover {
+      color: var(--text);
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+    }
+
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .task-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--surface-2);
+      border-radius: 8px;
+    }
+
+    .task-name {
+      font-weight: 500;
+    }
+
+    .task-score {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    .task-score.pass { color: var(--success); }
+    .task-score.partial { color: var(--warning); }
+    .task-score.fail { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-content">
+      <div class="logo">
+        <div class="logo-icon">🤏</div>
+        <h1>Pinch<span>Bench</span></h1>
+      </div>
+      <nav class="header-links">
+        <a href="https://github.com/pinchbench/skills">Run Benchmark</a>
+        <a href="https://docs.openclaw.ai">OpenClaw Docs</a>
+        <a href="https://github.com/pinchbench">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>AI Agent Benchmark Leaderboard</h2>
+      <p>See how well different LLMs perform as the brain of an OpenClaw agent. Real-world agentic tasks, standardized scoring.</p>
+    </section>
+
+    <section class="stats-grid" id="stats">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-submissions">-</div>
+        <div class="stat-label">Total Submissions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-models">-</div>
+        <div class="stat-label">Models Tested</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-verified">-</div>
+        <div class="stat-label">Verified Results</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-24h">-</div>
+        <div class="stat-label">Last 24 Hours</div>
+      </div>
+    </section>
+
+    <section class="leaderboard-section">
+      <div class="section-header">
+        <h3>Leaderboard</h3>
+      </div>
+
+      <div class="filters">
+        <div class="filter-group">
+          <label>Provider:</label>
+          <select id="filter-provider">
+            <option value="">All Providers</option>
+          </select>
+        </div>
+        <button class="toggle-btn" id="filter-verified">✓ Verified Only</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Model</th>
+              <th>Best Score</th>
+              <th>Submissions</th>
+              <th>Latest</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body">
+            <tr>
+              <td colspan="5">
+                <div class="loading">
+                  <div class="loading-spinner"></div>
+                  <p>Loading leaderboard...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>
+        PinchBench is part of <a href="https://openclaw.ai">OpenClaw</a> · 
+        <a href="https://github.com/pinchbench">View Source</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- Submission Detail Modal -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Submission Details</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'https://api.pinchbench.com';
+    // For local dev: const API_BASE = 'http://localhost:8787';
+
+    let verifiedOnly = false;
+    let currentProvider = '';
+
+    // Format percentage
+    const formatPercent = (value) => `${(value * 100).toFixed(1)}%`;
+
+    // Format date
+    const formatDate = (iso) => {
+      const date = new Date(iso);
+      const now = new Date();
+      const diff = now - date;
+      
+      if (diff < 60000) return 'just now';
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+      if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+      
+      return date.toLocaleDateString();
+    };
+
+    // Fetch stats
+    async function fetchStats() {
+      try {
+        const res = await fetch(`${API_BASE}/api/stats`);
+        const data = await res.json();
+        
+        document.getElementById('stat-submissions').textContent = data.total_submissions.toLocaleString();
+        document.getElementById('stat-models').textContent = data.total_models.toLocaleString();
+        document.getElementById('stat-verified').textContent = data.verified_submissions.toLocaleString();
+        document.getElementById('stat-24h').textContent = data.submissions_last_24h.toLocaleString();
+      } catch (err) {
+        console.error('Failed to fetch stats:', err);
+      }
+    }
+
+    // Fetch leaderboard
+    async function fetchLeaderboard() {
+      const tbody = document.getElementById('leaderboard-body');
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5">
+            <div class="loading">
+              <div class="loading-spinner"></div>
+              <p>Loading leaderboard...</p>
+            </div>
+          </td>
+        </tr>
+      `;
+
+      try {
+        const params = new URLSearchParams();
+        if (verifiedOnly) params.set('verified', 'true');
+        if (currentProvider) params.set('provider', currentProvider);
+        params.set('limit', '50');
+
+        const res = await fetch(`${API_BASE}/api/leaderboard?${params}`);
+        const data = await res.json();
+
+        if (!data.leaderboard || data.leaderboard.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <p>No submissions yet. Be the first to run the benchmark!</p>
+                </div>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = data.leaderboard.map((entry, idx) => {
+          const rank = idx + 1;
+          const rankClass = rank <= 3 ? `rank-${rank}` : '';
+          const scorePercent = entry.best_score_percentage * 100;
+          
+          return `
+            <tr onclick="showSubmission('${entry.best_submission_id}')" style="cursor: pointer">
+              <td class="rank-cell ${rankClass}">#${rank}</td>
+              <td>
+                <div class="model-cell">
+                  <span class="model-name">${escapeHtml(entry.model)}</span>
+                  ${entry.provider ? `<span class="model-provider">${escapeHtml(entry.provider)}</span>` : ''}
+                </div>
+              </td>
+              <td class="score-cell">
+                <div class="score-bar">
+                  <span>${scorePercent.toFixed(1)}%</span>
+                  <div class="score-bar-bg">
+                    <div class="score-bar-fill" style="width: ${scorePercent}%"></div>
+                  </div>
+                </div>
+              </td>
+              <td class="count-cell">${entry.submission_count}</td>
+              <td class="count-cell">${formatDate(entry.latest_submission)}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Failed to fetch leaderboard:', err);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5">
+              <div class="empty-state">
+                <p>Failed to load leaderboard. Please try again.</p>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    // Fetch models for filter dropdown
+    async function fetchModels() {
+      try {
+        const res = await fetch(`${API_BASE}/api/models`);
+        const data = await res.json();
+
+        const providers = [...new Set(data.models.map(m => m.provider).filter(Boolean))];
+        const select = document.getElementById('filter-provider');
+        
+        providers.sort().forEach(provider => {
+          const option = document.createElement('option');
+          option.value = provider;
+          option.textContent = provider;
+          select.appendChild(option);
+        });
+      } catch (err) {
+        console.error('Failed to fetch models:', err);
+      }
+    }
+
+    // Show submission detail modal
+    async function showSubmission(id) {
+      if (!id) return;
+      
+      const overlay = document.getElementById('modal-overlay');
+      const body = document.getElementById('modal-body');
+      
+      overlay.classList.add('open');
+      body.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading...</p></div>';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/submissions/${id}`);
+        const data = await res.json();
+        
+        if (data.status === 'error') {
+          body.innerHTML = `<p>Error: ${data.message}</p>`;
+          return;
+        }
+
+        const sub = data.submission;
+        document.getElementById('modal-title').textContent = sub.model;
+
+        body.innerHTML = `
+          <div style="margin-bottom: 1.5rem">
+            <p style="color: var(--text-muted); margin-bottom: 0.5rem">
+              Rank #${data.rank} · Top ${data.percentile}% · ${formatDate(sub.timestamp)}
+            </p>
+            <p style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace">
+              ${(sub.score_percentage * 100).toFixed(1)}%
+            </p>
+            <p style="color: var(--text-muted)">
+              ${sub.total_score} / ${sub.max_score} points
+              ${sub.verified ? '<span class="verified-badge">✓ Verified</span>' : ''}
+            </p>
+          </div>
+          
+          <h4 style="margin-bottom: 0.75rem; font-weight: 600">Task Breakdown</h4>
+          <div class="task-list">
+            ${sub.tasks.map(task => {
+              const pct = task.max_score > 0 ? task.score / task.max_score : 0;
+              const scoreClass = pct >= 0.8 ? 'pass' : pct >= 0.5 ? 'partial' : 'fail';
+              return `
+                <div class="task-item">
+                  <span class="task-name">${escapeHtml(task.task_id)}</span>
+                  <span class="task-score ${scoreClass}">${task.score}/${task.max_score}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+          
+          ${sub.client_version || sub.openclaw_version ? `
+            <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border)">
+              <p style="color: var(--text-muted); font-size: 0.875rem">
+                ${sub.client_version ? `Client: ${escapeHtml(sub.client_version)}` : ''}
+                ${sub.openclaw_version ? ` · OpenClaw: ${escapeHtml(sub.openclaw_version)}` : ''}
+              </p>
+            </div>
+          ` : ''}
+        `;
+      } catch (err) {
+        console.error('Failed to fetch submission:', err);
+        body.innerHTML = '<p>Failed to load submission details.</p>';
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.remove('open');
+    }
+
+    // Close modal on overlay click
+    document.getElementById('modal-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'modal-overlay') closeModal();
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // Escape HTML
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[c]);
+    }
+
+    // Event listeners
+    document.getElementById('filter-verified').addEventListener('click', function() {
+      verifiedOnly = !verifiedOnly;
+      this.classList.toggle('active', verifiedOnly);
+      fetchLeaderboard();
+    });
+
+    document.getElementById('filter-provider').addEventListener('change', function() {
+      currentProvider = this.value;
+      fetchLeaderboard();
+    });
+
+    // Check for submission ID in URL hash
+    function checkUrlHash() {
+      const hash = window.location.hash.slice(1);
+      if (hash && hash.length > 10) {
+        showSubmission(hash);
+      }
+    }
+
+    // Initialize
+    fetchStats();
+    fetchLeaderboard();
+    fetchModels();
+    checkUrlHash();
+
+    window.addEventListener('hashchange', checkUrlHash);
+  </script>
+</body>
+</html>
