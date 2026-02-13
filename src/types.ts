@@ -48,6 +48,8 @@ export type SubmissionRow = {
   score_percentage: number;
   total_score: number;
   max_score: number;
+  total_execution_time_seconds: number | null;
+  total_cost_usd: number | null;
   timestamp: string;
   created_at: string;
   client_version: string | null;
