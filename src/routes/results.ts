@@ -278,7 +278,7 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
         submission_id: payload.submission_id,
         rank,
         percentile: Number(percentile.toFixed(2)),
-        leaderboard_url: `https://pinchbench.com/leaderboard#${payload.submission_id}`,
+        leaderboard_url: `https://pinchbench.com/submission/${payload.submission_id}`,
       },
       existing ? 200 : 201,
     );
