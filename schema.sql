@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS submissions (
   total_score REAL NOT NULL,
   max_score REAL NOT NULL,
   score_percentage REAL NOT NULL,
+  total_execution_time_seconds REAL,
+  total_cost_usd REAL,
   timestamp TEXT NOT NULL,
   client_version TEXT,
   openclaw_version TEXT,
