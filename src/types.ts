@@ -28,6 +28,9 @@ export type SubmissionPayload = {
   max_score: number;
   total_execution_time_seconds?: number;
   total_cost_usd?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
   tasks: SubmissionTask[];
   usage_summary?: Record<string, unknown>;
   metadata?: Record<string, unknown>;

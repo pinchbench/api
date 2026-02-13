@@ -10,7 +10,10 @@
 			"database_id": "85219a08-0016-4255-bd3f-c347705f97a0",
 			"remote": true
 		}
-	]
+	],
+	"triggers": {
+		"crons": ["0 3 * * *"]
+	}
 	// "compatibility_flags": [
 	//   "nodejs_compat"
 	// ],

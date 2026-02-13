@@ -7,6 +7,57 @@ import { registerLeaderboardRoutes } from "./routes/leaderboard";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+// Log every POST request body for debugging
+app.use("/api/*", async (c, next) => {
+  if (c.req.method !== "POST") {
+    return next();
+  }
+
+  // Clone the request so the body can still be consumed by route handlers
+  const cloned = c.req.raw.clone();
+  let body: string | null = null;
+  try {
+    body = await cloned.text();
+  } catch {
+    body = null;
+  }
+
+  const ip =
+    c.req.header("CF-Connecting-IP") ||
+    c.req.header("X-Forwarded-For")?.split(",")[0]?.trim() ||
+    "unknown";
+
+  const headers: Record<string, string> = {};
+  c.req.raw.headers.forEach((value, key) => {
+    // Redact the auth token value but keep the key
+    if (key.toLowerCase() === "x-pinchbench-token") {
+      headers[key] = "[REDACTED]";
+    } else {
+      headers[key] = value;
+    }
+  });
+
+  // Fire-and-forget: don't block the response on the log write
+  c.executionCtx.waitUntil(
+    c.env.prod_pinchbench
+      .prepare(
+        `INSERT INTO raw_post_logs (method, path, headers, body, ip, created_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      )
+      .bind(
+        c.req.method,
+        new URL(c.req.url).pathname,
+        JSON.stringify(headers),
+        body,
+        ip,
+      )
+      .run()
+      .catch(() => {}), // Silently ignore logging failures
+  );
+
+  return next();
+});
+
 // Enable CORS for frontend access
 app.use(
   "/api/*",
@@ -53,4 +104,20 @@ registerResultsRoutes(app);
 registerRegisterRoutes(app);
 registerLeaderboardRoutes(app);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(
+    _event: ScheduledEvent,
+    env: { prod_pinchbench: import("@cloudflare/workers-types").D1Database },
+    ctx: ExecutionContext,
+  ) {
+    // Delete raw POST logs older than 30 days
+    ctx.waitUntil(
+      env.prod_pinchbench
+        .prepare(
+          "DELETE FROM raw_post_logs WHERE created_at < datetime('now', '-30 days')",
+        )
+        .run(),
+    );
+  },
+};
