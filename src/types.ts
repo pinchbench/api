@@ -29,3 +29,31 @@ export type SubmissionPayload = {
   usage_summary?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 };
+
+export type LeaderboardEntry = {
+  model: string;
+  provider: string | null;
+  best_score_percentage: number;
+  average_score_percentage: number;
+  submission_count: number;
+  latest_submission: string;
+  best_submission_id: string;
+};
+
+export type SubmissionRow = {
+  id: string;
+  model: string;
+  provider: string | null;
+  score_percentage: number;
+  total_score: number;
+  max_score: number;
+  timestamp: string;
+  created_at: string;
+  client_version: string | null;
+  openclaw_version: string | null;
+  run_id: string | null;
+  tasks: string;
+  usage_summary: string | null;
+  metadata: string | null;
+  claimed: number;
+};

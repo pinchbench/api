@@ -1,33 +1,6 @@
 import type { Hono } from "hono";
-import type { Bindings } from "../types";
+import type { Bindings, LeaderboardEntry, SubmissionRow } from "../types";
 import { hashToken } from "../utils/security";
-
-type LeaderboardEntry = {
-  model: string;
-  provider: string | null;
-  best_score_percentage: number;
-  submission_count: number;
-  latest_submission: string;
-  best_submission_id: string;
-};
-
-type SubmissionRow = {
-  id: string;
-  model: string;
-  provider: string | null;
-  score_percentage: number;
-  total_score: number;
-  max_score: number;
-  timestamp: string;
-  created_at: string;
-  client_version: string | null;
-  openclaw_version: string | null;
-  run_id: string | null;
-  tasks: string;
-  usage_summary: string | null;
-  metadata: string | null;
-  claimed: number;
-};
 
 const getAuthToken = (c: {
   req: { header: (name: string) => string | undefined };
@@ -57,6 +30,7 @@ export const registerLeaderboardRoutes = (
         s.model,
         s.provider,
         MAX(s.score_percentage) as best_score_percentage,
+        AVG(s.score_percentage) as average_score_percentage,
         COUNT(*) as submission_count,
         MAX(s.timestamp) as latest_submission,
         (
