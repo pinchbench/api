@@ -6,6 +6,28 @@ const getAuthToken = (c: {
   req: { header: (name: string) => string | undefined };
 }) => c.req.header("X-PinchBench-Token")?.trim();
 
+const resolveBenchmarkVersions = async (c: {
+  env: Bindings;
+  req: { query: (name: string) => string | undefined };
+}) => {
+  const requested = c.req.query("benchmark_version")?.trim();
+  if (requested) return [requested];
+  const currentRows = await c.env.prod_pinchbench
+    .prepare("SELECT id FROM benchmark_versions WHERE current = 1")
+    .all<{ id: string }>();
+  return currentRows.results?.map((row) => row.id) ?? [];
+};
+
+const appendBenchmarkVersionFilter = (
+  clausePrefix: string,
+  field: string,
+  versions: string[],
+) => {
+  if (versions.length === 0) return "";
+  const placeholders = versions.map(() => "?").join(", ");
+  return ` ${clausePrefix} ${field} IN (${placeholders})`;
+};
+
 export const registerLeaderboardRoutes = (
   app: Hono<{ Bindings: Bindings }>,
 ) => {
@@ -22,6 +44,7 @@ export const registerLeaderboardRoutes = (
     const verified = c.req.query("verified") === "true";
     const verifiedFlag = verified ? 1 : 0;
     const providerFilter = c.req.query("provider")?.trim();
+    const benchmarkVersions = await resolveBenchmarkVersions(c);
     const limitParam = parseInt(c.req.query("limit") ?? "50", 10);
     const limit = Math.min(Math.max(1, limitParam), 200);
 
@@ -49,6 +72,21 @@ export const registerLeaderboardRoutes = (
 
     const bindings: (string | number)[] = [verifiedFlag, verifiedFlag];
 
+    if (benchmarkVersions.length > 0) {
+      query = query.replace(
+        "ORDER BY s2.score_percentage DESC",
+        `AND s2.benchmark_version IN (${benchmarkVersions
+          .map(() => "?")
+          .join(", ")}) ORDER BY s2.score_percentage DESC`,
+      );
+      query += appendBenchmarkVersionFilter(
+        "AND",
+        "s.benchmark_version",
+        benchmarkVersions,
+      );
+      bindings.push(...benchmarkVersions, ...benchmarkVersions);
+    }
+
     if (providerFilter) {
       query += " AND s.provider = ?";
       bindings.push(providerFilter);
@@ -66,18 +104,36 @@ export const registerLeaderboardRoutes = (
       .bind(...bindings)
       .all<LeaderboardEntry>();
 
+    let totalModelsQuery = verified
+      ? "SELECT COUNT(DISTINCT s.model) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL"
+      : "SELECT COUNT(DISTINCT model) as count FROM submissions";
+    const totalModelsBindings: (string | number)[] = [];
+    if (benchmarkVersions.length > 0) {
+      totalModelsQuery += verified
+        ? appendBenchmarkVersionFilter(
+            "AND",
+            "s.benchmark_version",
+            benchmarkVersions,
+          )
+        : appendBenchmarkVersionFilter(
+            "WHERE",
+            "benchmark_version",
+            benchmarkVersions,
+          );
+      totalModelsBindings.push(...benchmarkVersions);
+    }
     const totalModels = await c.env.prod_pinchbench
-      .prepare(
-        verified
-          ? "SELECT COUNT(DISTINCT s.model) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL"
-          : "SELECT COUNT(DISTINCT model) as count FROM submissions",
-      )
+      .prepare(totalModelsQuery)
+      .bind(...totalModelsBindings)
       .first<{ count: number }>();
 
     return c.json({
       leaderboard: results.results ?? [],
       total_models: totalModels?.count ?? 0,
       verified_only: verified,
+      benchmark_version:
+        benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
+      benchmark_versions: benchmarkVersions,
       generated_at: new Date().toISOString(),
     });
   });
@@ -98,6 +154,7 @@ export const registerLeaderboardRoutes = (
     const model = c.req.query("model")?.trim();
     const provider = c.req.query("provider")?.trim();
     const verified = c.req.query("verified") === "true";
+    const benchmarkVersions = await resolveBenchmarkVersions(c);
     const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
     const limit = Math.min(Math.max(1, limitParam), 100);
     const offset = Math.max(0, parseInt(c.req.query("offset") ?? "0", 10));
@@ -115,6 +172,7 @@ export const registerLeaderboardRoutes = (
         s.created_at,
         s.client_version,
         s.openclaw_version,
+        s.benchmark_version,
         CASE WHEN t.claimed_at IS NOT NULL THEN 1 ELSE 0 END as claimed
       FROM submissions s
       JOIN tokens t ON s.token_id = t.id
@@ -135,6 +193,15 @@ export const registerLeaderboardRoutes = (
 
     if (verified) {
       query += " AND t.claimed_at IS NOT NULL";
+    }
+
+    if (benchmarkVersions.length > 0) {
+      query += appendBenchmarkVersionFilter(
+        "AND",
+        "s.benchmark_version",
+        benchmarkVersions,
+      );
+      bindings.push(...benchmarkVersions);
     }
 
     // Sorting
@@ -179,6 +246,15 @@ export const registerLeaderboardRoutes = (
       countQuery += " AND t.claimed_at IS NOT NULL";
     }
 
+    if (benchmarkVersions.length > 0) {
+      countQuery += appendBenchmarkVersionFilter(
+        "AND",
+        "s.benchmark_version",
+        benchmarkVersions,
+      );
+      countBindings.push(...benchmarkVersions);
+    }
+
     const totalRow = await c.env.prod_pinchbench
       .prepare(countQuery)
       .bind(...countBindings)
@@ -190,6 +266,9 @@ export const registerLeaderboardRoutes = (
       limit,
       offset,
       has_more: offset + limit < (totalRow?.total ?? 0),
+      benchmark_version:
+        benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
+      benchmark_versions: benchmarkVersions,
     });
   });
 
@@ -226,6 +305,7 @@ export const registerLeaderboardRoutes = (
           s.client_version,
           s.openclaw_version,
           s.run_id,
+          s.benchmark_version,
           s.tasks,
           s.usage_summary,
           s.metadata,
@@ -302,6 +382,7 @@ export const registerLeaderboardRoutes = (
         client_version: row.client_version,
         openclaw_version: row.openclaw_version,
         run_id: row.run_id,
+        benchmark_version: row.benchmark_version,
         tasks,
         usage_summary: usageSummary,
         metadata,
@@ -329,6 +410,7 @@ export const registerLeaderboardRoutes = (
    */
   app.get("/api/models", async (c) => {
     const verified = c.req.query("verified") === "true";
+    const benchmarkVersions = await resolveBenchmarkVersions(c);
 
     let query = `
       SELECT 
@@ -345,15 +427,35 @@ export const registerLeaderboardRoutes = (
       query += " WHERE t.claimed_at IS NOT NULL";
     }
 
+    if (benchmarkVersions.length > 0) {
+      query += verified
+        ? appendBenchmarkVersionFilter(
+            "AND",
+            "s.benchmark_version",
+            benchmarkVersions,
+          )
+        : appendBenchmarkVersionFilter(
+            "WHERE",
+            "s.benchmark_version",
+            benchmarkVersions,
+          );
+    }
+
     query += `
       GROUP BY s.model, s.provider
       ORDER BY submission_count DESC
     `;
 
-    const results = await c.env.prod_pinchbench.prepare(query).all();
+    const results = await c.env.prod_pinchbench
+      .prepare(query)
+      .bind(...benchmarkVersions)
+      .all();
 
     return c.json({
       models: results.results ?? [],
+      benchmark_version:
+        benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
+      benchmark_versions: benchmarkVersions,
     });
   });
 
@@ -402,6 +504,7 @@ export const registerLeaderboardRoutes = (
     const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
     const limit = Math.min(Math.max(1, limitParam), 100);
     const offset = Math.max(0, parseInt(c.req.query("offset") ?? "0", 10));
+    const benchmarkVersions = await resolveBenchmarkVersions(c);
 
     const results = await c.env.prod_pinchbench
       .prepare(
@@ -415,18 +518,39 @@ export const registerLeaderboardRoutes = (
           timestamp,
           created_at,
           client_version,
-          openclaw_version
+          openclaw_version,
+          benchmark_version
         FROM submissions
         WHERE token_id = ?
+          ${
+            benchmarkVersions.length > 0
+              ? appendBenchmarkVersionFilter(
+                  "AND",
+                  "benchmark_version",
+                  benchmarkVersions,
+                )
+              : ""
+          }
         ORDER BY timestamp DESC
         LIMIT ? OFFSET ?`,
       )
-      .bind(tokenRow.id, limit, offset)
+      .bind(tokenRow.id, ...benchmarkVersions, limit, offset)
       .all();
 
     const totalRow = await c.env.prod_pinchbench
-      .prepare("SELECT COUNT(*) as total FROM submissions WHERE token_id = ?")
-      .bind(tokenRow.id)
+      .prepare(
+        `SELECT COUNT(*) as total FROM submissions WHERE token_id = ?
+        ${
+          benchmarkVersions.length > 0
+            ? appendBenchmarkVersionFilter(
+                "AND",
+                "benchmark_version",
+                benchmarkVersions,
+              )
+            : ""
+        }`,
+      )
+      .bind(tokenRow.id, ...benchmarkVersions)
       .first<{ total: number }>();
 
     return c.json({
@@ -436,6 +560,9 @@ export const registerLeaderboardRoutes = (
       offset,
       has_more: offset + limit < (totalRow?.total ?? 0),
       token_claimed: tokenRow.claimed_at !== null,
+      benchmark_version:
+        benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
+      benchmark_versions: benchmarkVersions,
     });
   });
 
@@ -445,23 +572,68 @@ export const registerLeaderboardRoutes = (
    * Returns aggregate statistics about the benchmark.
    */
   app.get("/api/stats", async (c) => {
+    const benchmarkVersions = await resolveBenchmarkVersions(c);
     const [totalSubmissions, totalModels, verifiedSubmissions, recentActivity] =
       await Promise.all([
         c.env.prod_pinchbench
-          .prepare("SELECT COUNT(*) as count FROM submissions")
-          .first<{ count: number }>(),
-        c.env.prod_pinchbench
-          .prepare("SELECT COUNT(DISTINCT model) as count FROM submissions")
+          .prepare(
+            `SELECT COUNT(*) as count FROM submissions
+            ${
+              benchmarkVersions.length > 0
+                ? appendBenchmarkVersionFilter(
+                    "WHERE",
+                    "benchmark_version",
+                    benchmarkVersions,
+                  )
+                : ""
+            }`,
+          )
+          .bind(...benchmarkVersions)
           .first<{ count: number }>(),
         c.env.prod_pinchbench
           .prepare(
-            "SELECT COUNT(*) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL",
+            `SELECT COUNT(DISTINCT model) as count FROM submissions
+            ${
+              benchmarkVersions.length > 0
+                ? appendBenchmarkVersionFilter(
+                    "WHERE",
+                    "benchmark_version",
+                    benchmarkVersions,
+                  )
+                : ""
+            }`,
           )
+          .bind(...benchmarkVersions)
           .first<{ count: number }>(),
         c.env.prod_pinchbench
           .prepare(
-            "SELECT COUNT(*) as count FROM submissions WHERE created_at >= datetime('now', '-24 hours')",
+            `SELECT COUNT(*) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL
+            ${
+              benchmarkVersions.length > 0
+                ? appendBenchmarkVersionFilter(
+                    "AND",
+                    "s.benchmark_version",
+                    benchmarkVersions,
+                  )
+                : ""
+            }`,
           )
+          .bind(...benchmarkVersions)
+          .first<{ count: number }>(),
+        c.env.prod_pinchbench
+          .prepare(
+            `SELECT COUNT(*) as count FROM submissions WHERE created_at >= datetime('now', '-24 hours')
+            ${
+              benchmarkVersions.length > 0
+                ? appendBenchmarkVersionFilter(
+                    "AND",
+                    "benchmark_version",
+                    benchmarkVersions,
+                  )
+                : ""
+            }`,
+          )
+          .bind(...benchmarkVersions)
           .first<{ count: number }>(),
       ]);
 
@@ -470,10 +642,20 @@ export const registerLeaderboardRoutes = (
       .prepare(
         `SELECT model, MAX(score_percentage) as best_score
          FROM submissions
+         ${
+           benchmarkVersions.length > 0
+             ? appendBenchmarkVersionFilter(
+                 "WHERE",
+                 "benchmark_version",
+                 benchmarkVersions,
+               )
+             : ""
+         }
          GROUP BY model
          ORDER BY best_score DESC
          LIMIT 1`,
       )
+      .bind(...benchmarkVersions)
       .first<{ model: string; best_score: number }>();
 
     return c.json({
@@ -482,6 +664,9 @@ export const registerLeaderboardRoutes = (
       verified_submissions: verifiedSubmissions?.count ?? 0,
       submissions_last_24h: recentActivity?.count ?? 0,
       top_model: topModel ?? null,
+      benchmark_version:
+        benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
+      benchmark_versions: benchmarkVersions,
       generated_at: new Date().toISOString(),
     });
   });

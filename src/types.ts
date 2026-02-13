@@ -23,6 +23,7 @@ export type SubmissionPayload = {
   provider?: string;
   run_id?: string;
   openclaw_version?: string;
+  benchmark_version?: string;
   total_score: number;
   max_score: number;
   tasks: SubmissionTask[];
@@ -52,6 +53,7 @@ export type SubmissionRow = {
   client_version: string | null;
   openclaw_version: string | null;
   run_id: string | null;
+  benchmark_version: string | null;
   tasks: string;
   usage_summary: string | null;
   metadata: string | null;

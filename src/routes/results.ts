@@ -194,12 +194,13 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
             client_version,
             openclaw_version,
             run_id,
+            benchmark_version,
             tasks,
             usage_summary,
             metadata,
             created_at
           ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
           )`,
         )
         .bind(
@@ -214,11 +215,21 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
           payload.client_version ?? null,
           payload.openclaw_version ?? null,
           payload.run_id ?? null,
+          payload.benchmark_version ?? null,
           JSON.stringify(payload.tasks ?? []),
           JSON.stringify(payload.usage_summary ?? null),
           JSON.stringify(payload.metadata ?? null),
         )
         .run();
+
+      if (payload.benchmark_version) {
+        await c.env.prod_pinchbench
+          .prepare(
+            "INSERT OR IGNORE INTO benchmark_versions (id, current) VALUES (?, 0)",
+          )
+          .bind(payload.benchmark_version)
+          .run();
+      }
     }
 
     await c.env.prod_pinchbench

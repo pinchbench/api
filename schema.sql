@@ -31,11 +31,18 @@ CREATE TABLE IF NOT EXISTS submissions (
   client_version TEXT,
   openclaw_version TEXT,
   run_id TEXT,
+  benchmark_version TEXT,
   tasks TEXT NOT NULL,
   usage_summary TEXT,
   metadata TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (token_id) REFERENCES tokens(id)
+);
+
+CREATE TABLE IF NOT EXISTS benchmark_versions (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  current INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_submissions_model ON submissions(model);
