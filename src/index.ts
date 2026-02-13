@@ -39,6 +39,8 @@ app.get("/", (c) => {
       "GET /api/submissions": "List submissions with filters",
       "GET /api/submissions/:id": "Get submission details",
       "GET /api/models": "List all models",
+      "GET /api/providers/:provider/models":
+        "List models for a provider with stats",
       "GET /api/me/submissions": "Get your submissions (requires auth)",
       "GET /api/stats": "Get aggregate statistics",
       "GET /api/benchmark_versions": "List all benchmark versions",
