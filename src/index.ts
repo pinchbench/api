@@ -34,12 +34,15 @@ app.get("/", (c) => {
     endpoints: {
       "POST /api/register": "Register a new API token",
       "POST /api/results": "Submit benchmark results",
-      "GET /api/leaderboard": "Get aggregated leaderboard",
+      "GET /api/leaderboard":
+        "Get aggregated leaderboard (supports ?version param)",
       "GET /api/submissions": "List submissions with filters",
       "GET /api/submissions/:id": "Get submission details",
       "GET /api/models": "List all models",
       "GET /api/me/submissions": "Get your submissions (requires auth)",
       "GET /api/stats": "Get aggregate statistics",
+      "GET /api/benchmark_versions": "List all benchmark versions",
+      "GET /api/benchmark_versions/latest": "Get the current benchmark version",
     },
   });
 });
