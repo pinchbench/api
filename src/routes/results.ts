@@ -190,6 +190,8 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
             total_score,
             max_score,
             score_percentage,
+            total_execution_time_seconds,
+            total_cost_usd,
             timestamp,
             client_version,
             openclaw_version,
@@ -200,7 +202,7 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
             metadata,
             created_at
           ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
           )`,
         )
         .bind(
@@ -211,6 +213,8 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
           payload.total_score,
           payload.max_score,
           computedScorePercentage,
+          payload.total_execution_time_seconds ?? null,
+          payload.total_cost_usd ?? null,
           payload.timestamp,
           payload.client_version ?? null,
           payload.openclaw_version ?? null,

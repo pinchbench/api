@@ -26,6 +26,8 @@ export type SubmissionPayload = {
   benchmark_version?: string;
   total_score: number;
   max_score: number;
+  total_execution_time_seconds?: number;
+  total_cost_usd?: number;
   tasks: SubmissionTask[];
   usage_summary?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
