@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { Bindings, SubmissionPayload } from "../types";
-import { ensureHttps, hashToken } from "../utils/security";
+import { ensureHttps, getAuthToken, hashToken } from "../utils/security";
 
 const UUID_V4_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -10,10 +10,6 @@ const isIsoTimestamp = (value: string): boolean => {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed);
 };
-
-const getAuthToken = (c: {
-  req: { header: (name: string) => string | undefined };
-}) => c.req.header("X-PinchBench-Token")?.trim();
 
 export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
   app.post("/api/results", async (c) => {

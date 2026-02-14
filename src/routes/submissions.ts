@@ -1,34 +1,10 @@
 import type { Hono } from "hono";
 import type { Bindings, SubmissionRow } from "../types";
-import { hashToken } from "../utils/security";
-
-const getAuthToken = (c: {
-  req: { header: (name: string) => string | undefined };
-}) => c.req.header("X-PinchBench-Token")?.trim();
-
-const resolveBenchmarkVersions = async (c: {
-  env: Bindings;
-  req: { query: (name: string) => string | undefined };
-}) => {
-  // Support both "version" and "benchmark_version" query params
-  const requested =
-    c.req.query("version")?.trim() || c.req.query("benchmark_version")?.trim();
-  if (requested) return [requested];
-  const currentRows = await c.env.prod_pinchbench
-    .prepare("SELECT id FROM benchmark_versions WHERE current = 1")
-    .all<{ id: string }>();
-  return currentRows.results?.map((row) => row.id) ?? [];
-};
-
-const appendBenchmarkVersionFilter = (
-  clausePrefix: string,
-  field: string,
-  versions: string[],
-) => {
-  if (versions.length === 0) return "";
-  const placeholders = versions.map(() => "?").join(", ");
-  return ` ${clausePrefix} ${field} IN (${placeholders})`;
-};
+import { getAuthToken, hashToken } from "../utils/security";
+import {
+  resolveBenchmarkVersions,
+  appendBenchmarkVersionFilter,
+} from "../utils/query";
 
 export const registerSubmissionRoutes = (
   app: Hono<{ Bindings: Bindings }>,

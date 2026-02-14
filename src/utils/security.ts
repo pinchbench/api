@@ -28,3 +28,7 @@ export const ensureHttps = (url: string): boolean => {
     return false;
   }
 };
+
+export const getAuthToken = (c: {
+  req: { header: (name: string) => string | undefined };
+}) => c.req.header("X-PinchBench-Token")?.trim();
