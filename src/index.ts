@@ -4,6 +4,9 @@ import type { Bindings } from "./types";
 import { registerResultsRoutes } from "./routes/results";
 import { registerRegisterRoutes } from "./routes/register";
 import { registerLeaderboardRoutes } from "./routes/leaderboard";
+import { registerSubmissionRoutes } from "./routes/submissions";
+import { registerBenchmarkVersionRoutes } from "./routes/benchmarkVersions";
+import { registerProvidersRoutes } from "./routes/providers";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -90,6 +93,7 @@ app.get("/", (c) => {
       "GET /api/submissions": "List submissions with filters",
       "GET /api/submissions/:id": "Get submission details",
       "GET /api/models": "List all models",
+      "GET /api/providers": "List all providers",
       "GET /api/providers/:provider/models":
         "List models for a provider with stats",
       "GET /api/me/submissions": "Get your submissions (requires auth)",
@@ -103,6 +107,9 @@ app.get("/", (c) => {
 registerResultsRoutes(app);
 registerRegisterRoutes(app);
 registerLeaderboardRoutes(app);
+registerSubmissionRoutes(app);
+registerBenchmarkVersionRoutes(app);
+registerProvidersRoutes(app);
 
 export default {
   fetch: app.fetch,
