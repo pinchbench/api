@@ -278,18 +278,19 @@ export const registerSubmissionRoutes = (
   });
 
   /**
-   * GET /api/models/:model/submissions
+   * GET /api/model-submissions?model=...
    *
    * Returns a lightweight list of all submissions for a given model,
    * ordered by score descending. Designed for populating a dropdown.
    * Includes an `is_best` flag marking the leaderboard entry.
    *
    * Query params:
+   *   - model: (required) model name, e.g. "google/gemini-3-flash-preview"
    *   - verified: "true" for claimed tokens only
    *   - version / benchmark_version: filter by benchmark version
    */
-  app.get("/api/models/:model/submissions", async (c) => {
-    const model = c.req.param("model");
+  app.get("/api/model-submissions", async (c) => {
+    const model = c.req.query("model");
 
     if (!model?.trim()) {
       return c.json(
