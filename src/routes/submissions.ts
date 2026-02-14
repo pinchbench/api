@@ -278,6 +278,123 @@ export const registerSubmissionRoutes = (
   });
 
   /**
+   * GET /api/models/:model/submissions
+   *
+   * Returns a lightweight list of all submissions for a given model,
+   * ordered by score descending. Designed for populating a dropdown.
+   * Includes an `is_best` flag marking the leaderboard entry.
+   *
+   * Query params:
+   *   - verified: "true" for claimed tokens only
+   *   - version / benchmark_version: filter by benchmark version
+   */
+  app.get("/api/models/:model/submissions", async (c) => {
+    const model = c.req.param("model");
+
+    if (!model?.trim()) {
+      return c.json(
+        {
+          status: "error",
+          error: "bad_request",
+          message: "Model name is required",
+        },
+        400,
+      );
+    }
+
+    const verified = c.req.query("verified") === "true";
+    const benchmarkVersions = await resolveBenchmarkVersions(c);
+
+    // First, find the best submission ID using the same logic as the leaderboard
+    let bestQuery = `
+      SELECT s.id
+      FROM submissions s
+      JOIN tokens t ON s.token_id = t.id
+      WHERE s.model = ?
+    `;
+    const bestBindings: (string | number)[] = [model];
+
+    if (verified) {
+      bestQuery += " AND t.claimed_at IS NOT NULL";
+    }
+
+    if (benchmarkVersions.length > 0) {
+      bestQuery += appendBenchmarkVersionFilter(
+        "AND",
+        "s.benchmark_version",
+        benchmarkVersions,
+      );
+      bestBindings.push(...benchmarkVersions);
+    }
+
+    bestQuery += " ORDER BY s.score_percentage DESC, s.timestamp DESC, s.id ASC LIMIT 1";
+
+    const bestRow = await c.env.prod_pinchbench
+      .prepare(bestQuery)
+      .bind(...bestBindings)
+      .first<{ id: string }>();
+
+    const bestSubmissionId = bestRow?.id ?? null;
+
+    // Now fetch all submissions for this model
+    let query = `
+      SELECT
+        s.id,
+        s.score_percentage,
+        s.total_score,
+        s.max_score,
+        s.timestamp
+      FROM submissions s
+      JOIN tokens t ON s.token_id = t.id
+      WHERE s.model = ?
+    `;
+    const bindings: (string | number)[] = [model];
+
+    if (verified) {
+      query += " AND t.claimed_at IS NOT NULL";
+    }
+
+    if (benchmarkVersions.length > 0) {
+      query += appendBenchmarkVersionFilter(
+        "AND",
+        "s.benchmark_version",
+        benchmarkVersions,
+      );
+      bindings.push(...benchmarkVersions);
+    }
+
+    query += " ORDER BY s.score_percentage DESC, s.timestamp DESC";
+
+    const results = await c.env.prod_pinchbench
+      .prepare(query)
+      .bind(...bindings)
+      .all<{
+        id: string;
+        score_percentage: number;
+        total_score: number;
+        max_score: number;
+        timestamp: string;
+      }>();
+
+    const submissions = (results.results ?? []).map((row) => ({
+      id: row.id,
+      score_percentage: row.score_percentage,
+      total_score: row.total_score,
+      max_score: row.max_score,
+      timestamp: row.timestamp,
+      is_best: row.id === bestSubmissionId,
+    }));
+
+    return c.json({
+      submissions,
+      model,
+      benchmark_version:
+        benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
+      benchmark_versions: benchmarkVersions,
+    });
+  });
+
+  /**
    * GET /api/me/submissions
    *
    * Returns submissions for the authenticated user's token.
