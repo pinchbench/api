@@ -7,8 +7,12 @@ import { registerLeaderboardRoutes } from "./routes/leaderboard";
 import { registerSubmissionRoutes } from "./routes/submissions";
 import { registerBenchmarkVersionRoutes } from "./routes/benchmarkVersions";
 import { registerProvidersRoutes } from "./routes/providers";
+import { admin } from "./routes/admin";
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Mount admin routes (protected by Cloudflare Access)
+app.route("/admin", admin);
 
 // Log every POST request body for debugging
 app.use("/api/*", async (c, next) => {

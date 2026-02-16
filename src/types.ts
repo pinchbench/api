@@ -2,6 +2,18 @@ import type { D1Database } from "@cloudflare/workers-types";
 
 export type Bindings = {
   prod_pinchbench: D1Database;
+  CF_ACCESS_TEAM_DOMAIN?: string;
+  CF_ACCESS_AUD?: string;
+  CF_ACCESS_BYPASS?: string;
+};
+
+export type AdminUser = {
+  email: string;
+  sub: string;
+};
+
+export type AdminVariables = {
+  adminUser: AdminUser;
 };
 
 export type SubmissionTask = {
