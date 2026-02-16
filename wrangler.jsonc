@@ -12,13 +12,21 @@
 		}
 	],
 	"triggers": {
-		"crons": ["0 3 * * *"]
+		"crons": [
+			"0 3 * * *"
+		]
 	},
 	"observability": {
 		"logs": {
 			"enabled": false,
 			"invocation_logs": true
 		}
+	},
+	// Cloudflare Access configuration for /admin/* routes
+	// Set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD in Cloudflare Dashboard (Settings → Variables)
+	// For local development only: set CF_ACCESS_BYPASS=true via `wrangler dev --var CF_ACCESS_BYPASS:true`
+	"vars": {
+		"CF_ACCESS_BYPASS": "false"
 	}
 	// "compatibility_flags": [
 	//   "nodejs_compat"
