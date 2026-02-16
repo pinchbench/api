@@ -1,3 +1,7 @@
+# PinchBench API
+
+## Development
+
 ```txt
 npm install
 npm run dev
@@ -17,5 +21,9 @@ Pass the `CloudflareBindings` as generics when instantiation `Hono`:
 
 ```ts
 // src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>()
+const app = new Hono<{ Bindings: CloudflareBindings }>();
 ```
+
+## Admin Interface
+
+The admin interface is available at https://api.pinchbench.com/admin
