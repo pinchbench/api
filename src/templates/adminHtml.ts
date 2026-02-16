@@ -7,34 +7,39 @@ export const adminHTML = `<!DOCTYPE html>
   <title>PinchBench Admin</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #e6edf3; }
     .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-    header { background: #1a1a2e; color: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
+    header { background: #161b22; color: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #30363d; }
     header h1 { font-size: 24px; }
     header .user { font-size: 14px; opacity: 0.8; margin-top: 5px; }
     .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-    .tab { padding: 10px 20px; background: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
-    .tab.active { background: #1a1a2e; color: white; }
-    .panel { display: none; background: white; border-radius: 8px; padding: 20px; }
+    .tab { padding: 10px 20px; background: #21262d; border: 1px solid #30363d; border-radius: 8px; cursor: pointer; font-size: 14px; color: #e6edf3; }
+    .tab:hover { background: #30363d; }
+    .tab.active { background: #238636; color: white; border-color: #238636; }
+    .panel { display: none; background: #161b22; border-radius: 8px; padding: 20px; border: 1px solid #30363d; }
     .panel.active { display: block; }
+    .panel h2 { color: #e6edf3; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-    th { background: #f9f9f9; font-weight: 600; }
-    tr:hover { background: #f5f5f5; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #30363d; }
+    th { background: #21262d; font-weight: 600; color: #e6edf3; }
+    tr:hover { background: #21262d; }
     .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
-    .btn-primary { background: #4CAF50; color: white; }
-    .btn-danger { background: #f44336; color: white; }
-    .btn-secondary { background: #666; color: white; }
+    .btn-primary { background: #238636; color: white; }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-danger { background: #da3633; color: white; }
+    .btn-danger:hover { background: #f85149; }
+    .btn-secondary { background: #30363d; color: #e6edf3; border: 1px solid #484f58; }
+    .btn-secondary:hover { background: #484f58; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
-    .badge-green { background: #e8f5e9; color: #2e7d32; }
-    .badge-red { background: #ffebee; color: #c62828; }
-    .badge-gray { background: #f5f5f5; color: #666; }
+    .badge-green { background: #238636; color: white; }
+    .badge-red { background: #da3633; color: white; }
+    .badge-gray { background: #30363d; color: #8b949e; }
     .pagination { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
-    .loading { text-align: center; padding: 40px; color: #666; }
-    .error { background: #ffebee; color: #c62828; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-    .success { background: #e8f5e9; color: #2e7d32; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-    .mono { font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; }
+    .loading { text-align: center; padding: 40px; color: #8b949e; }
+    .error { background: #490202; color: #f85149; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #da3633; }
+    .success { background: #0d1117; color: #3fb950; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #238636; }
+    .mono { font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; color: #79c0ff; }
   </style>
 </head>
 <body>
