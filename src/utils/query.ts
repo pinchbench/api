@@ -7,9 +7,16 @@ export const resolveBenchmarkVersions = async (c: {
   // Support both "version" and "benchmark_version" query params
   const requested =
     c.req.query("version")?.trim() || c.req.query("benchmark_version")?.trim();
-  if (requested) return [requested];
+  if (requested) {
+    // Verify the requested version is not hidden
+    const row = await c.env.prod_pinchbench
+      .prepare("SELECT id FROM benchmark_versions WHERE id = ? AND hidden = 0")
+      .bind(requested)
+      .first<{ id: string }>();
+    return row ? [requested] : [];
+  }
   const currentRows = await c.env.prod_pinchbench
-    .prepare("SELECT id FROM benchmark_versions WHERE current = 1")
+    .prepare("SELECT id FROM benchmark_versions WHERE current = 1 AND hidden = 0")
     .all<{ id: string }>();
   return currentRows.results?.map((row) => row.id) ?? [];
 };

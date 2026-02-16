@@ -15,11 +15,13 @@ export const registerBenchmarkVersionRoutes = (
         `SELECT 
           id, 
           created_at,
-          current
+          current,
+          hidden
         FROM benchmark_versions
+        WHERE hidden = 0
         ORDER BY created_at DESC`,
       )
-      .all<{ id: string; created_at: string; current: number }>();
+      .all<{ id: string; created_at: string; current: number; hidden: number }>();
 
     // Get submission counts for each version
     const versionsWithCounts = await Promise.all(
@@ -58,7 +60,7 @@ export const registerBenchmarkVersionRoutes = (
           created_at,
           current
         FROM benchmark_versions
-        WHERE current = 1
+        WHERE current = 1 AND hidden = 0
         ORDER BY created_at DESC
         LIMIT 1`,
       )
