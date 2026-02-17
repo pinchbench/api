@@ -40,6 +40,11 @@ export const adminHTML = `<!DOCTYPE html>
     .error { background: #490202; color: #f85149; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #da3633; }
     .success { background: #0d1117; color: #3fb950; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #238636; }
     .mono { font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; color: #79c0ff; }
+    .search-box { margin-bottom: 15px; }
+    .search-box input { width: 100%; max-width: 400px; padding: 10px 14px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #e6edf3; font-size: 14px; }
+    .search-box input:focus { outline: none; border-color: #238636; box-shadow: 0 0 0 3px rgba(35, 134, 54, 0.3); }
+    .search-box input::placeholder { color: #8b949e; }
+    .no-results { text-align: center; padding: 40px; color: #8b949e; }
   </style>
 </head>
 <body>
@@ -59,16 +64,25 @@ export const adminHTML = `<!DOCTYPE html>
 
     <div id="versions" class="panel">
       <h2 style="margin-bottom: 15px;">Benchmark Versions</h2>
+      <div class="search-box">
+        <input type="text" id="versions-search" placeholder="Search by version ID or status..." oninput="filterVersions()">
+      </div>
       <div id="versions-content"><div class="loading">Loading...</div></div>
     </div>
 
     <div id="submissions" class="panel">
       <h2 style="margin-bottom: 15px;">Submissions</h2>
+      <div class="search-box">
+        <input type="text" id="submissions-search" placeholder="Search by ID, model, provider, or version..." oninput="filterSubmissions()">
+      </div>
       <div id="submissions-content"><div class="loading">Loading...</div></div>
     </div>
 
     <div id="tokens" class="panel">
       <h2 style="margin-bottom: 15px;">API Tokens</h2>
+      <div class="search-box">
+        <input type="text" id="tokens-search" placeholder="Search by ID or status..." oninput="filterTokens()">
+      </div>
       <div id="tokens-content"><div class="loading">Loading...</div></div>
     </div>
   </div>
@@ -78,6 +92,13 @@ export const adminHTML = `<!DOCTYPE html>
     let currentSubmissionsPage = 0;
     let currentTokensPage = 0;
     const PAGE_SIZE = 20;
+
+    // Store full data for client-side filtering
+    let allVersions = [];
+    let allSubmissions = [];
+    let allTokens = [];
+    let totalSubmissions = 0;
+    let totalTokens = 0;
 
     // Tab switching
     function switchTab(tabName) {
@@ -133,15 +154,32 @@ export const adminHTML = `<!DOCTYPE html>
     async function loadVersions() {
       try {
         const data = await api('/versions');
-        renderVersions(data.versions);
+        allVersions = data.versions;
+        renderVersions(allVersions);
       } catch (err) {
         document.getElementById('versions-content').innerHTML = '<div class="error">' + err.message + '</div>';
       }
     }
 
+    function filterVersions() {
+      const query = document.getElementById('versions-search').value.toLowerCase().trim();
+      if (!query) {
+        renderVersions(allVersions);
+        return;
+      }
+      const filtered = allVersions.filter(v => {
+        const status = (v.is_current ? 'current' : '') + ' ' + (v.is_hidden ? 'hidden' : 'visible');
+        return v.id.toLowerCase().includes(query) || status.includes(query);
+      });
+      renderVersions(filtered);
+    }
+
     function renderVersions(versions) {
       if (!versions.length) {
-        document.getElementById('versions-content').innerHTML = '<p>No versions found.</p>';
+        const query = document.getElementById('versions-search').value;
+        document.getElementById('versions-content').innerHTML = query 
+          ? '<div class="no-results">No versions match your search.</div>' 
+          : '<p>No versions found.</p>';
         return;
       }
       let html = '<table><thead><tr><th>Version ID</th><th>Created</th><th>Submissions</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
@@ -193,19 +231,39 @@ export const adminHTML = `<!DOCTYPE html>
       currentSubmissionsPage = page;
       try {
         const data = await api('/submissions?limit=' + PAGE_SIZE + '&offset=' + (page * PAGE_SIZE));
-        renderSubmissions(data);
+        allSubmissions = data.submissions;
+        totalSubmissions = data.total;
+        renderSubmissions(allSubmissions, totalSubmissions);
       } catch (err) {
         document.getElementById('submissions-content').innerHTML = '<div class="error">' + err.message + '</div>';
       }
     }
 
-    function renderSubmissions(data) {
-      if (!data.submissions.length) {
-        document.getElementById('submissions-content').innerHTML = '<p>No submissions found.</p>';
+    function filterSubmissions() {
+      const query = document.getElementById('submissions-search').value.toLowerCase().trim();
+      if (!query) {
+        renderSubmissions(allSubmissions, totalSubmissions);
+        return;
+      }
+      const filtered = allSubmissions.filter(s => {
+        return s.id.toLowerCase().includes(query) ||
+               s.model.toLowerCase().includes(query) ||
+               (s.provider && s.provider.toLowerCase().includes(query)) ||
+               (s.benchmark_version && s.benchmark_version.toLowerCase().includes(query));
+      });
+      renderSubmissions(filtered, filtered.length, true);
+    }
+
+    function renderSubmissions(submissions, total, isFiltered = false) {
+      if (!submissions.length) {
+        const query = document.getElementById('submissions-search').value;
+        document.getElementById('submissions-content').innerHTML = query 
+          ? '<div class="no-results">No submissions match your search.</div>' 
+          : '<p>No submissions found.</p>';
         return;
       }
       let html = '<table><thead><tr><th>ID</th><th>Model</th><th>Provider</th><th>Score</th><th>Version</th><th>Date</th><th>Actions</th></tr></thead><tbody>';
-      data.submissions.forEach(s => {
+      submissions.forEach(s => {
         html += '<tr>';
         html += '<td class="mono">' + s.id.slice(0, 8) + '...</td>';
         html += '<td>' + s.model + '</td>';
@@ -217,11 +275,15 @@ export const adminHTML = `<!DOCTYPE html>
         html += '</tr>';
       });
       html += '</tbody></table>';
-      html += '<div class="pagination">';
-      html += '<button class="btn btn-secondary" onclick="loadSubmissions(' + (currentSubmissionsPage - 1) + ')" ' + (currentSubmissionsPage === 0 ? 'disabled' : '') + '>Previous</button>';
-      html += '<span>Page ' + (currentSubmissionsPage + 1) + ' / ' + Math.ceil(data.total / PAGE_SIZE) + '</span>';
-      html += '<button class="btn btn-secondary" onclick="loadSubmissions(' + (currentSubmissionsPage + 1) + ')" ' + ((currentSubmissionsPage + 1) * PAGE_SIZE >= data.total ? 'disabled' : '') + '>Next</button>';
-      html += '</div>';
+      if (!isFiltered) {
+        html += '<div class="pagination">';
+        html += '<button class="btn btn-secondary" onclick="loadSubmissions(' + (currentSubmissionsPage - 1) + ')" ' + (currentSubmissionsPage === 0 ? 'disabled' : '') + '>Previous</button>';
+        html += '<span>Page ' + (currentSubmissionsPage + 1) + ' / ' + Math.ceil(total / PAGE_SIZE) + '</span>';
+        html += '<button class="btn btn-secondary" onclick="loadSubmissions(' + (currentSubmissionsPage + 1) + ')" ' + ((currentSubmissionsPage + 1) * PAGE_SIZE >= total ? 'disabled' : '') + '>Next</button>';
+        html += '</div>';
+      } else {
+        html += '<div class="pagination"><span>' + submissions.length + ' result' + (submissions.length === 1 ? '' : 's') + ' on this page</span></div>';
+      }
       document.getElementById('submissions-content').innerHTML = html;
     }
 
@@ -241,19 +303,37 @@ export const adminHTML = `<!DOCTYPE html>
       currentTokensPage = page;
       try {
         const data = await api('/tokens?limit=' + PAGE_SIZE + '&offset=' + (page * PAGE_SIZE));
-        renderTokens(data);
+        allTokens = data.tokens;
+        totalTokens = data.total;
+        renderTokens(allTokens, totalTokens);
       } catch (err) {
         document.getElementById('tokens-content').innerHTML = '<div class="error">' + err.message + '</div>';
       }
     }
 
-    function renderTokens(data) {
-      if (!data.tokens.length) {
-        document.getElementById('tokens-content').innerHTML = '<p>No tokens found.</p>';
+    function filterTokens() {
+      const query = document.getElementById('tokens-search').value.toLowerCase().trim();
+      if (!query) {
+        renderTokens(allTokens, totalTokens);
+        return;
+      }
+      const filtered = allTokens.filter(t => {
+        const status = t.claimed_at ? 'claimed' : (t.claim_code ? 'pending' : 'unclaimed');
+        return t.id.toLowerCase().includes(query) || status.includes(query);
+      });
+      renderTokens(filtered, filtered.length, true);
+    }
+
+    function renderTokens(tokens, total, isFiltered = false) {
+      if (!tokens.length) {
+        const query = document.getElementById('tokens-search').value;
+        document.getElementById('tokens-content').innerHTML = query 
+          ? '<div class="no-results">No tokens match your search.</div>' 
+          : '<p>No tokens found.</p>';
         return;
       }
       let html = '<table><thead><tr><th>ID</th><th>Created</th><th>Last Used</th><th>Submissions</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
-      data.tokens.forEach(t => {
+      tokens.forEach(t => {
         const status = t.claimed_at 
           ? '<span class="badge badge-green">Claimed</span>' 
           : (t.claim_code ? '<span class="badge badge-gray">Pending</span>' : '<span class="badge badge-gray">Unclaimed</span>');
@@ -273,11 +353,15 @@ export const adminHTML = `<!DOCTYPE html>
         html += '</tr>';
       });
       html += '</tbody></table>';
-      html += '<div class="pagination">';
-      html += '<button class="btn btn-secondary" onclick="loadTokens(' + (currentTokensPage - 1) + ')" ' + (currentTokensPage === 0 ? 'disabled' : '') + '>Previous</button>';
-      html += '<span>Page ' + (currentTokensPage + 1) + ' / ' + Math.ceil(data.total / PAGE_SIZE) + '</span>';
-      html += '<button class="btn btn-secondary" onclick="loadTokens(' + (currentTokensPage + 1) + ')" ' + ((currentTokensPage + 1) * PAGE_SIZE >= data.total ? 'disabled' : '') + '>Next</button>';
-      html += '</div>';
+      if (!isFiltered) {
+        html += '<div class="pagination">';
+        html += '<button class="btn btn-secondary" onclick="loadTokens(' + (currentTokensPage - 1) + ')" ' + (currentTokensPage === 0 ? 'disabled' : '') + '>Previous</button>';
+        html += '<span>Page ' + (currentTokensPage + 1) + ' / ' + Math.ceil(total / PAGE_SIZE) + '</span>';
+        html += '<button class="btn btn-secondary" onclick="loadTokens(' + (currentTokensPage + 1) + ')" ' + ((currentTokensPage + 1) * PAGE_SIZE >= total ? 'disabled' : '') + '>Next</button>';
+        html += '</div>';
+      } else {
+        html += '<div class="pagination"><span>' + tokens.length + ' result' + (tokens.length === 1 ? '' : 's') + ' on this page</span></div>';
+      }
       document.getElementById('tokens-content').innerHTML = html;
     }
 
