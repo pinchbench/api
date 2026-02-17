@@ -35,15 +35,20 @@ export const adminHTML = `<!DOCTYPE html>
     .badge-green { background: #238636; color: white; }
     .badge-red { background: #da3633; color: white; }
     .badge-gray { background: #30363d; color: #8b949e; }
-    .pagination { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
+    .pagination { margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .loading { text-align: center; padding: 40px; color: #8b949e; }
     .error { background: #490202; color: #f85149; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #da3633; }
     .success { background: #0d1117; color: #3fb950; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #238636; }
     .mono { font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; color: #79c0ff; }
-    .search-box { margin-bottom: 15px; }
+    .toolbar { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+    .search-box { flex: 1; min-width: 200px; }
     .search-box input { width: 100%; max-width: 400px; padding: 10px 14px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #e6edf3; font-size: 14px; }
     .search-box input:focus { outline: none; border-color: #238636; box-shadow: 0 0 0 3px rgba(35, 134, 54, 0.3); }
     .search-box input::placeholder { color: #8b949e; }
+    .page-size-selector { display: flex; align-items: center; gap: 8px; }
+    .page-size-selector label { font-size: 13px; color: #8b949e; }
+    .page-size-selector select { padding: 8px 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #e6edf3; font-size: 14px; cursor: pointer; }
+    .page-size-selector select:focus { outline: none; border-color: #238636; }
     .no-results { text-align: center; padding: 40px; color: #8b949e; }
   </style>
 </head>
@@ -64,24 +69,48 @@ export const adminHTML = `<!DOCTYPE html>
 
     <div id="versions" class="panel">
       <h2 style="margin-bottom: 15px;">Benchmark Versions</h2>
-      <div class="search-box">
-        <input type="text" id="versions-search" placeholder="Search by version ID or status..." oninput="filterVersions()">
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="versions-search" placeholder="Search by version ID or status..." oninput="filterVersions()">
+        </div>
       </div>
       <div id="versions-content"><div class="loading">Loading...</div></div>
     </div>
 
     <div id="submissions" class="panel">
       <h2 style="margin-bottom: 15px;">Submissions</h2>
-      <div class="search-box">
-        <input type="text" id="submissions-search" placeholder="Search by ID, model, provider, or version..." oninput="filterSubmissions()">
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="submissions-search" placeholder="Search by ID, model, provider, or version..." oninput="filterSubmissions()">
+        </div>
+        <div class="page-size-selector">
+          <label for="submissions-page-size">Show:</label>
+          <select id="submissions-page-size" onchange="changeSubmissionsPageSize()">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all">All</option>
+          </select>
+        </div>
       </div>
       <div id="submissions-content"><div class="loading">Loading...</div></div>
     </div>
 
     <div id="tokens" class="panel">
       <h2 style="margin-bottom: 15px;">API Tokens</h2>
-      <div class="search-box">
-        <input type="text" id="tokens-search" placeholder="Search by ID or status..." oninput="filterTokens()">
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="tokens-search" placeholder="Search by ID or status..." oninput="filterTokens()">
+        </div>
+        <div class="page-size-selector">
+          <label for="tokens-page-size">Show:</label>
+          <select id="tokens-page-size" onchange="changeTokensPageSize()">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all">All</option>
+          </select>
+        </div>
       </div>
       <div id="tokens-content"><div class="loading">Loading...</div></div>
     </div>
@@ -91,7 +120,8 @@ export const adminHTML = `<!DOCTYPE html>
     const API_BASE = '/admin/api';
     let currentSubmissionsPage = 0;
     let currentTokensPage = 0;
-    const PAGE_SIZE = 20;
+    let submissionsPageSize = 20;
+    let tokensPageSize = 20;
 
     // Store full data for client-side filtering
     let allVersions = [];
@@ -227,10 +257,20 @@ export const adminHTML = `<!DOCTYPE html>
     }
 
     // ========== SUBMISSIONS ==========
+    function changeSubmissionsPageSize() {
+      const select = document.getElementById('submissions-page-size');
+      const value = select.value;
+      submissionsPageSize = value === 'all' ? 10000 : parseInt(value, 10);
+      currentSubmissionsPage = 0;
+      document.getElementById('submissions-search').value = '';
+      loadSubmissions(0);
+    }
+
     async function loadSubmissions(page = 0) {
       currentSubmissionsPage = page;
+      document.getElementById('submissions-content').innerHTML = '<div class="loading">Loading...</div>';
       try {
-        const data = await api('/submissions?limit=' + PAGE_SIZE + '&offset=' + (page * PAGE_SIZE));
+        const data = await api('/submissions?limit=' + submissionsPageSize + '&offset=' + (page * submissionsPageSize));
         allSubmissions = data.submissions;
         totalSubmissions = data.total;
         renderSubmissions(allSubmissions, totalSubmissions);
@@ -275,15 +315,20 @@ export const adminHTML = `<!DOCTYPE html>
         html += '</tr>';
       });
       html += '</tbody></table>';
-      if (!isFiltered) {
-        html += '<div class="pagination">';
+      
+      const showingAll = submissionsPageSize >= 10000;
+      html += '<div class="pagination">';
+      if (!isFiltered && !showingAll) {
         html += '<button class="btn btn-secondary" onclick="loadSubmissions(' + (currentSubmissionsPage - 1) + ')" ' + (currentSubmissionsPage === 0 ? 'disabled' : '') + '>Previous</button>';
-        html += '<span>Page ' + (currentSubmissionsPage + 1) + ' / ' + Math.ceil(total / PAGE_SIZE) + '</span>';
-        html += '<button class="btn btn-secondary" onclick="loadSubmissions(' + (currentSubmissionsPage + 1) + ')" ' + ((currentSubmissionsPage + 1) * PAGE_SIZE >= total ? 'disabled' : '') + '>Next</button>';
-        html += '</div>';
-      } else {
-        html += '<div class="pagination"><span>' + submissions.length + ' result' + (submissions.length === 1 ? '' : 's') + ' on this page</span></div>';
+        html += '<span>Page ' + (currentSubmissionsPage + 1) + ' / ' + Math.ceil(total / submissionsPageSize) + '</span>';
+        html += '<button class="btn btn-secondary" onclick="loadSubmissions(' + (currentSubmissionsPage + 1) + ')" ' + ((currentSubmissionsPage + 1) * submissionsPageSize >= total ? 'disabled' : '') + '>Next</button>';
       }
+      if (isFiltered) {
+        html += '<span>' + submissions.length + ' of ' + allSubmissions.length + ' loaded results</span>';
+      } else {
+        html += '<span style="margin-left: auto; color: #8b949e;">Showing ' + submissions.length + ' of ' + total + ' total</span>';
+      }
+      html += '</div>';
       document.getElementById('submissions-content').innerHTML = html;
     }
 
@@ -299,10 +344,20 @@ export const adminHTML = `<!DOCTYPE html>
     }
 
     // ========== TOKENS ==========
+    function changeTokensPageSize() {
+      const select = document.getElementById('tokens-page-size');
+      const value = select.value;
+      tokensPageSize = value === 'all' ? 10000 : parseInt(value, 10);
+      currentTokensPage = 0;
+      document.getElementById('tokens-search').value = '';
+      loadTokens(0);
+    }
+
     async function loadTokens(page = 0) {
       currentTokensPage = page;
+      document.getElementById('tokens-content').innerHTML = '<div class="loading">Loading...</div>';
       try {
-        const data = await api('/tokens?limit=' + PAGE_SIZE + '&offset=' + (page * PAGE_SIZE));
+        const data = await api('/tokens?limit=' + tokensPageSize + '&offset=' + (page * tokensPageSize));
         allTokens = data.tokens;
         totalTokens = data.total;
         renderTokens(allTokens, totalTokens);
@@ -353,15 +408,20 @@ export const adminHTML = `<!DOCTYPE html>
         html += '</tr>';
       });
       html += '</tbody></table>';
-      if (!isFiltered) {
-        html += '<div class="pagination">';
+      
+      const showingAll = tokensPageSize >= 10000;
+      html += '<div class="pagination">';
+      if (!isFiltered && !showingAll) {
         html += '<button class="btn btn-secondary" onclick="loadTokens(' + (currentTokensPage - 1) + ')" ' + (currentTokensPage === 0 ? 'disabled' : '') + '>Previous</button>';
-        html += '<span>Page ' + (currentTokensPage + 1) + ' / ' + Math.ceil(total / PAGE_SIZE) + '</span>';
-        html += '<button class="btn btn-secondary" onclick="loadTokens(' + (currentTokensPage + 1) + ')" ' + ((currentTokensPage + 1) * PAGE_SIZE >= total ? 'disabled' : '') + '>Next</button>';
-        html += '</div>';
-      } else {
-        html += '<div class="pagination"><span>' + tokens.length + ' result' + (tokens.length === 1 ? '' : 's') + ' on this page</span></div>';
+        html += '<span>Page ' + (currentTokensPage + 1) + ' / ' + Math.ceil(total / tokensPageSize) + '</span>';
+        html += '<button class="btn btn-secondary" onclick="loadTokens(' + (currentTokensPage + 1) + ')" ' + ((currentTokensPage + 1) * tokensPageSize >= total ? 'disabled' : '') + '>Next</button>';
       }
+      if (isFiltered) {
+        html += '<span>' + tokens.length + ' of ' + allTokens.length + ' loaded results</span>';
+      } else {
+        html += '<span style="margin-left: auto; color: #8b949e;">Showing ' + tokens.length + ' of ' + total + ' total</span>';
+      }
+      html += '</div>';
       document.getElementById('tokens-content').innerHTML = html;
     }
 
