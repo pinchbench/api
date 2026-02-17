@@ -114,23 +114,18 @@ admin.put("/api/versions/:id", async (c) => {
     return c.json({ error: "Version not found" }, 404);
   }
 
-  // Handle setting current
-  if (body.current === true) {
-    // Remove current from all other versions
+  // Handle setting current - allow multiple versions to be current
+  if (typeof body.current === "boolean") {
     await c.env.prod_pinchbench
-      .prepare("UPDATE benchmark_versions SET current = 0")
-      .run();
-    // Set this one as current
-    await c.env.prod_pinchbench
-      .prepare("UPDATE benchmark_versions SET current = 1 WHERE id = ?")
-      .bind(id)
+      .prepare("UPDATE benchmark_versions SET current = ? WHERE id = ?")
+      .bind(body.current ? 1 : 0, id)
       .run();
 
     await logAdminAction(
       c.env.prod_pinchbench,
       user?.email ?? "unknown",
-      "set_current_version",
-      { version_id: id },
+      "toggle_current_version",
+      { version_id: id, current: body.current },
     );
   }
 

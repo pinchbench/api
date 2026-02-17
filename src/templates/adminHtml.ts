@@ -222,7 +222,7 @@ export const adminHTML = `<!DOCTYPE html>
         html += '<td>' + v.submission_count + '</td>';
         html += '<td>' + current + ' ' + hidden + '</td>';
         html += '<td>';
-        html += '<button class="btn btn-primary" onclick="setCurrent(\\'' + v.id + '\\')" ' + (v.is_current ? 'disabled' : '') + '>Set Current</button> ';
+        html += '<button class="btn ' + (v.is_current ? 'btn-secondary' : 'btn-primary') + '" onclick="toggleCurrent(\\'' + v.id + '\\', ' + !v.is_current + ')">' + (v.is_current ? 'Remove Current' : 'Set Current') + '</button> ';
         html += '<button class="btn btn-secondary" onclick="toggleHidden(\\'' + v.id + '\\', ' + !v.is_hidden + ')">' + (v.is_hidden ? 'Unhide' : 'Hide') + '</button>';
         html += '</td></tr>';
       });
@@ -230,13 +230,13 @@ export const adminHTML = `<!DOCTYPE html>
       document.getElementById('versions-content').innerHTML = html;
     }
 
-    async function setCurrent(id) {
+    async function toggleCurrent(id, current) {
       try {
         await api('/versions/' + id, {
           method: 'PUT',
-          body: JSON.stringify({ current: true })
+          body: JSON.stringify({ current: current })
         });
-        showAlert('Version ' + id + ' is now current');
+        showAlert('Version ' + id + ' is now ' + (current ? 'current' : 'not current'));
         loadVersions();
       } catch (err) {
         showAlert(err.message, 'error');
