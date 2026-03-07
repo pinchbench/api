@@ -13,12 +13,14 @@ export const registerLeaderboardRoutes = (
    *
    * Returns aggregated best scores grouped by model.
    * Query params:
-   *   - verified: "true" to only include submissions from claimed tokens
+   *   - verified: "true" (default) to only include submissions from claimed tokens,
+   *               "false" to include all submissions
    *   - provider: filter by provider name
    *   - limit: max results (default 50, max 200)
    */
   app.get("/api/leaderboard", async (c) => {
-    const verified = c.req.query("verified") === "true";
+    // Default to verified=true for public leaderboard integrity
+    const verified = c.req.query("verified") !== "false";
     const verifiedFlag = verified ? 1 : 0;
     const providerFilter = c.req.query("provider")?.trim();
     const benchmarkVersions = await resolveBenchmarkVersions(c);
@@ -128,9 +130,12 @@ export const registerLeaderboardRoutes = (
    *
    * Returns list of all models with submission counts.
    * Useful for filter dropdowns in the frontend.
+   * Query params:
+   *   - verified: "true" (default) to only include submissions from claimed tokens
    */
   app.get("/api/models", async (c) => {
-    const verified = c.req.query("verified") === "true";
+    // Default to verified=true for consistency with leaderboard
+    const verified = c.req.query("verified") !== "false";
     const benchmarkVersions = await resolveBenchmarkVersions(c);
 
     let query = `
