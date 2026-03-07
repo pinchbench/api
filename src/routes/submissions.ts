@@ -22,6 +22,9 @@ export const registerSubmissionRoutes = (
    *   - sort: "score" (default), "recent", "oldest"
    */
   app.get("/api/submissions", async (c) => {
+    // Cache for 30 seconds at CDN edge (shorter than leaderboard since submissions change more)
+    c.header("Cache-Control", "public, max-age=30, s-maxage=30");
+    
     const model = c.req.query("model")?.trim();
     const provider = c.req.query("provider")?.trim();
     const verified = c.req.query("verified") === "true";

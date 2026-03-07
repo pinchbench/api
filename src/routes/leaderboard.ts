@@ -18,6 +18,9 @@ export const registerLeaderboardRoutes = (
    *   - limit: max results (default 50, max 200)
    */
   app.get("/api/leaderboard", async (c) => {
+    // Cache for 60 seconds at CDN edge
+    c.header("Cache-Control", "public, max-age=60, s-maxage=60");
+    
     const verified = c.req.query("verified") === "true";
     const verifiedFlag = verified ? 1 : 0;
     const providerFilter = c.req.query("provider")?.trim();
@@ -130,6 +133,9 @@ export const registerLeaderboardRoutes = (
    * Useful for filter dropdowns in the frontend.
    */
   app.get("/api/models", async (c) => {
+    // Cache for 60 seconds at CDN edge
+    c.header("Cache-Control", "public, max-age=60, s-maxage=60");
+    
     const verified = c.req.query("verified") === "true";
     const benchmarkVersions = await resolveBenchmarkVersions(c);
 
@@ -186,6 +192,9 @@ export const registerLeaderboardRoutes = (
    * Returns aggregate statistics about the benchmark.
    */
   app.get("/api/stats", async (c) => {
+    // Cache for 60 seconds at CDN edge
+    c.header("Cache-Control", "public, max-age=60, s-maxage=60");
+    
     const benchmarkVersions = await resolveBenchmarkVersions(c);
     const [totalSubmissions, totalModels, verifiedSubmissions, recentActivity] =
       await Promise.all([
