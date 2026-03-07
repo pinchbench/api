@@ -30,6 +30,9 @@ export const adminHTML = `<!DOCTYPE html>
     .btn-danger:hover { background: #f85149; }
     .btn-secondary { background: #30363d; color: #e6edf3; border: 1px solid #484f58; }
     .btn-secondary:hover { background: #484f58; }
+    .btn-copy { background: #1f6feb; color: white; }
+    .btn-copy:hover { background: #388bfd; }
+    .btn-copy.copied { background: #238636; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
     .badge-green { background: #238636; color: white; }
@@ -399,6 +402,7 @@ export const adminHTML = `<!DOCTYPE html>
         html += '<td>' + t.submission_count + '</td>';
         html += '<td>' + status + '</td>';
         html += '<td>';
+        html += '<button class="btn btn-copy" id="copy-btn-' + t.id.slice(0, 8) + '" onclick="copyToken(\\'' + t.id + '\\', this)">Copy</button> ';
         if (!t.claimed_at) {
           html += '<button class="btn btn-primary" onclick="confirmToken(\\'' + t.id + '\\')">Confirm</button>';
         } else {
@@ -423,6 +427,35 @@ export const adminHTML = `<!DOCTYPE html>
       }
       html += '</div>';
       document.getElementById('tokens-content').innerHTML = html;
+    }
+
+    async function copyToken(id, btn) {
+      try {
+        await navigator.clipboard.writeText(id);
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.remove('copied');
+        }, 2000);
+      } catch (err) {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = id;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      }
     }
 
     async function confirmToken(id) {
