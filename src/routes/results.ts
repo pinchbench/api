@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import type { Bindings, SubmissionPayload } from "../types";
 import { ensureHttps, getAuthToken, hashToken } from "../utils/security";
+import { normalizeModelName } from "../utils/models";
 
 const UUID_V4_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -145,6 +146,9 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
       );
     }
 
+    // Normalize model name (strip "openrouter/" prefix)
+    const normalizedModel = normalizeModelName(payload.model);
+
     const existing = await c.env.prod_pinchbench
       .prepare(
         "SELECT id, score_percentage FROM submissions WHERE id = ? LIMIT 1",
@@ -207,7 +211,7 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
         .bind(
           payload.submission_id,
           tokenRow.id,
-          payload.model,
+          normalizedModel,
           payload.provider ?? null,
           payload.total_score,
           payload.max_score,
