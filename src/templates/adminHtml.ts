@@ -22,6 +22,11 @@ export const adminHTML = `<!DOCTYPE html>
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #30363d; }
     th { background: #21262d; font-weight: 600; color: #e6edf3; }
+    th.sortable { cursor: pointer; user-select: none; position: relative; padding-right: 24px; }
+    th.sortable:hover { background: #30363d; }
+    th.sortable::after { content: '⇅'; position: absolute; right: 8px; opacity: 0.3; font-size: 12px; }
+    th.sortable.sort-asc::after { content: '↑'; opacity: 1; color: #238636; }
+    th.sortable.sort-desc::after { content: '↓'; opacity: 1; color: #238636; }
     tr:hover { background: #21262d; }
     .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
     .btn-primary { background: #238636; color: white; }
@@ -126,12 +131,45 @@ export const adminHTML = `<!DOCTYPE html>
     let submissionsPageSize = 20;
     let tokensPageSize = 20;
 
-    // Store full data for client-side filtering
+    // Store full data for client-side filtering and sorting
     let allVersions = [];
     let allSubmissions = [];
     let allTokens = [];
     let totalSubmissions = 0;
     let totalTokens = 0;
+
+    // Sort state for each table: { column: string, direction: 'asc' | 'desc' }
+    let versionsSort = { column: 'created_at', direction: 'desc' };
+    let submissionsSort = { column: 'timestamp', direction: 'desc' };
+    let tokensSort = { column: 'created_at', direction: 'desc' };
+
+    // Generic sort function
+    function sortData(data, column, direction, getters) {
+      const getValue = getters[column] || (item => item[column]);
+      return [...data].sort((a, b) => {
+        let aVal = getValue(a);
+        let bVal = getValue(b);
+        
+        // Handle null/undefined
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return direction === 'asc' ? 1 : -1;
+        if (bVal == null) return direction === 'asc' ? -1 : 1;
+        
+        // Handle dates
+        if (aVal instanceof Date) aVal = aVal.getTime();
+        if (bVal instanceof Date) bVal = bVal.getTime();
+        
+        // Handle strings
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          return direction === 'asc' 
+            ? aVal.localeCompare(bVal) 
+            : bVal.localeCompare(aVal);
+        }
+        
+        // Handle numbers
+        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+      });
+    }
 
     // Tab switching
     function switchTab(tabName) {
@@ -184,11 +222,28 @@ export const adminHTML = `<!DOCTYPE html>
     }
 
     // ========== VERSIONS ==========
+    const versionsGetters = {
+      id: v => v.id,
+      created_at: v => new Date(v.created_at),
+      submission_count: v => v.submission_count,
+      status: v => (v.is_current ? 'a' : 'z') + (v.is_hidden ? 'z' : 'a') // Sort current first, visible first
+    };
+
+    function sortVersions(column) {
+      if (versionsSort.column === column) {
+        versionsSort.direction = versionsSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        versionsSort.column = column;
+        versionsSort.direction = 'asc';
+      }
+      filterVersions();
+    }
+
     async function loadVersions() {
       try {
         const data = await api('/versions');
         allVersions = data.versions;
-        renderVersions(allVersions);
+        filterVersions();
       } catch (err) {
         document.getElementById('versions-content').innerHTML = '<div class="error">' + err.message + '</div>';
       }
@@ -196,15 +251,15 @@ export const adminHTML = `<!DOCTYPE html>
 
     function filterVersions() {
       const query = document.getElementById('versions-search').value.toLowerCase().trim();
-      if (!query) {
-        renderVersions(allVersions);
-        return;
+      let filtered = allVersions;
+      if (query) {
+        filtered = allVersions.filter(v => {
+          const status = (v.is_current ? 'current' : '') + ' ' + (v.is_hidden ? 'hidden' : 'visible');
+          return v.id.toLowerCase().includes(query) || status.includes(query);
+        });
       }
-      const filtered = allVersions.filter(v => {
-        const status = (v.is_current ? 'current' : '') + ' ' + (v.is_hidden ? 'hidden' : 'visible');
-        return v.id.toLowerCase().includes(query) || status.includes(query);
-      });
-      renderVersions(filtered);
+      const sorted = sortData(filtered, versionsSort.column, versionsSort.direction, versionsGetters);
+      renderVersions(sorted);
     }
 
     function renderVersions(versions) {
@@ -215,7 +270,20 @@ export const adminHTML = `<!DOCTYPE html>
           : '<p>No versions found.</p>';
         return;
       }
-      let html = '<table><thead><tr><th>Version ID</th><th>Created</th><th>Submissions</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+      
+      function sortClass(col) {
+        if (versionsSort.column !== col) return 'sortable';
+        return 'sortable sort-' + versionsSort.direction;
+      }
+      
+      let html = '<table><thead><tr>';
+      html += '<th class="' + sortClass('id') + '" onclick="sortVersions(\\'id\\')">Version ID</th>';
+      html += '<th class="' + sortClass('created_at') + '" onclick="sortVersions(\\'created_at\\')">Created</th>';
+      html += '<th class="' + sortClass('submission_count') + '" onclick="sortVersions(\\'submission_count\\')">Submissions</th>';
+      html += '<th class="' + sortClass('status') + '" onclick="sortVersions(\\'status\\')">Status</th>';
+      html += '<th>Actions</th>';
+      html += '</tr></thead><tbody>';
+      
       versions.forEach(v => {
         const current = v.is_current ? '<span class="badge badge-green">Current</span>' : '';
         const hidden = v.is_hidden ? '<span class="badge badge-red">Hidden</span>' : '';
@@ -260,6 +328,25 @@ export const adminHTML = `<!DOCTYPE html>
     }
 
     // ========== SUBMISSIONS ==========
+    const submissionsGetters = {
+      id: s => s.id,
+      model: s => s.model,
+      provider: s => s.provider || '',
+      score_percentage: s => s.score_percentage,
+      benchmark_version: s => s.benchmark_version || '',
+      timestamp: s => new Date(s.timestamp)
+    };
+
+    function sortSubmissions(column) {
+      if (submissionsSort.column === column) {
+        submissionsSort.direction = submissionsSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        submissionsSort.column = column;
+        submissionsSort.direction = 'asc';
+      }
+      filterSubmissions();
+    }
+
     function changeSubmissionsPageSize() {
       const select = document.getElementById('submissions-page-size');
       const value = select.value;
@@ -276,7 +363,7 @@ export const adminHTML = `<!DOCTYPE html>
         const data = await api('/submissions?limit=' + submissionsPageSize + '&offset=' + (page * submissionsPageSize));
         allSubmissions = data.submissions;
         totalSubmissions = data.total;
-        renderSubmissions(allSubmissions, totalSubmissions);
+        filterSubmissions();
       } catch (err) {
         document.getElementById('submissions-content').innerHTML = '<div class="error">' + err.message + '</div>';
       }
@@ -284,17 +371,17 @@ export const adminHTML = `<!DOCTYPE html>
 
     function filterSubmissions() {
       const query = document.getElementById('submissions-search').value.toLowerCase().trim();
-      if (!query) {
-        renderSubmissions(allSubmissions, totalSubmissions);
-        return;
+      let filtered = allSubmissions;
+      if (query) {
+        filtered = allSubmissions.filter(s => {
+          return s.id.toLowerCase().includes(query) ||
+                 s.model.toLowerCase().includes(query) ||
+                 (s.provider && s.provider.toLowerCase().includes(query)) ||
+                 (s.benchmark_version && s.benchmark_version.toLowerCase().includes(query));
+        });
       }
-      const filtered = allSubmissions.filter(s => {
-        return s.id.toLowerCase().includes(query) ||
-               s.model.toLowerCase().includes(query) ||
-               (s.provider && s.provider.toLowerCase().includes(query)) ||
-               (s.benchmark_version && s.benchmark_version.toLowerCase().includes(query));
-      });
-      renderSubmissions(filtered, filtered.length, true);
+      const sorted = sortData(filtered, submissionsSort.column, submissionsSort.direction, submissionsGetters);
+      renderSubmissions(sorted, query ? sorted.length : totalSubmissions, !!query);
     }
 
     function renderSubmissions(submissions, total, isFiltered = false) {
@@ -305,7 +392,22 @@ export const adminHTML = `<!DOCTYPE html>
           : '<p>No submissions found.</p>';
         return;
       }
-      let html = '<table><thead><tr><th>ID</th><th>Model</th><th>Provider</th><th>Score</th><th>Version</th><th>Date</th><th>Actions</th></tr></thead><tbody>';
+      
+      function sortClass(col) {
+        if (submissionsSort.column !== col) return 'sortable';
+        return 'sortable sort-' + submissionsSort.direction;
+      }
+      
+      let html = '<table><thead><tr>';
+      html += '<th class="' + sortClass('id') + '" onclick="sortSubmissions(\\'id\\')">ID</th>';
+      html += '<th class="' + sortClass('model') + '" onclick="sortSubmissions(\\'model\\')">Model</th>';
+      html += '<th class="' + sortClass('provider') + '" onclick="sortSubmissions(\\'provider\\')">Provider</th>';
+      html += '<th class="' + sortClass('score_percentage') + '" onclick="sortSubmissions(\\'score_percentage\\')">Score</th>';
+      html += '<th class="' + sortClass('benchmark_version') + '" onclick="sortSubmissions(\\'benchmark_version\\')">Version</th>';
+      html += '<th class="' + sortClass('timestamp') + '" onclick="sortSubmissions(\\'timestamp\\')">Date</th>';
+      html += '<th>Actions</th>';
+      html += '</tr></thead><tbody>';
+      
       submissions.forEach(s => {
         html += '<tr>';
         html += '<td class="mono">' + s.id.slice(0, 8) + '...</td>';
@@ -347,6 +449,24 @@ export const adminHTML = `<!DOCTYPE html>
     }
 
     // ========== TOKENS ==========
+    const tokensGetters = {
+      id: t => t.id,
+      created_at: t => new Date(t.created_at),
+      last_used_at: t => t.last_used_at ? new Date(t.last_used_at) : null,
+      submission_count: t => t.submission_count,
+      status: t => t.claimed_at ? 'a_claimed' : (t.claim_code ? 'b_pending' : 'c_unclaimed')
+    };
+
+    function sortTokens(column) {
+      if (tokensSort.column === column) {
+        tokensSort.direction = tokensSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        tokensSort.column = column;
+        tokensSort.direction = 'asc';
+      }
+      filterTokens();
+    }
+
     function changeTokensPageSize() {
       const select = document.getElementById('tokens-page-size');
       const value = select.value;
@@ -363,7 +483,7 @@ export const adminHTML = `<!DOCTYPE html>
         const data = await api('/tokens?limit=' + tokensPageSize + '&offset=' + (page * tokensPageSize));
         allTokens = data.tokens;
         totalTokens = data.total;
-        renderTokens(allTokens, totalTokens);
+        filterTokens();
       } catch (err) {
         document.getElementById('tokens-content').innerHTML = '<div class="error">' + err.message + '</div>';
       }
@@ -371,15 +491,15 @@ export const adminHTML = `<!DOCTYPE html>
 
     function filterTokens() {
       const query = document.getElementById('tokens-search').value.toLowerCase().trim();
-      if (!query) {
-        renderTokens(allTokens, totalTokens);
-        return;
+      let filtered = allTokens;
+      if (query) {
+        filtered = allTokens.filter(t => {
+          const status = t.claimed_at ? 'claimed' : (t.claim_code ? 'pending' : 'unclaimed');
+          return t.id.toLowerCase().includes(query) || status.includes(query);
+        });
       }
-      const filtered = allTokens.filter(t => {
-        const status = t.claimed_at ? 'claimed' : (t.claim_code ? 'pending' : 'unclaimed');
-        return t.id.toLowerCase().includes(query) || status.includes(query);
-      });
-      renderTokens(filtered, filtered.length, true);
+      const sorted = sortData(filtered, tokensSort.column, tokensSort.direction, tokensGetters);
+      renderTokens(sorted, query ? sorted.length : totalTokens, !!query);
     }
 
     function renderTokens(tokens, total, isFiltered = false) {
@@ -390,7 +510,21 @@ export const adminHTML = `<!DOCTYPE html>
           : '<p>No tokens found.</p>';
         return;
       }
-      let html = '<table><thead><tr><th>ID</th><th>Created</th><th>Last Used</th><th>Submissions</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+      
+      function sortClass(col) {
+        if (tokensSort.column !== col) return 'sortable';
+        return 'sortable sort-' + tokensSort.direction;
+      }
+      
+      let html = '<table><thead><tr>';
+      html += '<th class="' + sortClass('id') + '" onclick="sortTokens(\\'id\\')">ID</th>';
+      html += '<th class="' + sortClass('created_at') + '" onclick="sortTokens(\\'created_at\\')">Created</th>';
+      html += '<th class="' + sortClass('last_used_at') + '" onclick="sortTokens(\\'last_used_at\\')">Last Used</th>';
+      html += '<th class="' + sortClass('submission_count') + '" onclick="sortTokens(\\'submission_count\\')">Submissions</th>';
+      html += '<th class="' + sortClass('status') + '" onclick="sortTokens(\\'status\\')">Status</th>';
+      html += '<th>Actions</th>';
+      html += '</tr></thead><tbody>';
+      
       tokens.forEach(t => {
         const status = t.claimed_at 
           ? '<span class="badge badge-green">Claimed</span>' 
