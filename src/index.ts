@@ -36,12 +36,7 @@ app.use("/api/*", async (c, next) => {
 
   const headers: Record<string, string> = {};
   c.req.raw.headers.forEach((value, key) => {
-    // Redact the auth token value but keep the key
-    if (key.toLowerCase() === "x-pinchbench-token") {
-      headers[key] = "[REDACTED]";
-    } else {
-      headers[key] = value;
-    }
+    headers[key] = value;
   });
 
   // Fire-and-forget: don't block the response on the log write
