@@ -201,15 +201,11 @@ admin.get("/api/submissions", async (c) => {
 admin.delete("/api/submissions/zero-percent", async (c) => {
   const user = getAdminUser(c);
 
-  const countRow = await c.env.prod_pinchbench
-    .prepare("SELECT COUNT(*) as count FROM submissions WHERE score_percentage = 0")
-    .first<{ count: number }>();
-
-  const deletedCount = countRow?.count ?? 0;
-
-  await c.env.prod_pinchbench
+  const result = await c.env.prod_pinchbench
     .prepare("DELETE FROM submissions WHERE score_percentage = 0")
     .run();
+
+  const deletedCount = result.meta.changes ?? 0;
 
   await logAdminAction(
     c.env.prod_pinchbench,
