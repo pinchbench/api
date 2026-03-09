@@ -213,7 +213,7 @@ async function handleGithubOAuthCallback(
     return c.redirect(`${FRONTEND_BASE}/claim/error?reason=already_claimed`);
   }
 
-  return c.redirect(`${FRONTEND_BASE}/claim/success`);
+  return c.redirect(`${FRONTEND_BASE}/claim/success?username=${encodeURIComponent(githubUsername)}`);
 }
 
 export const registerClaimRoutes = (app: Hono<{ Bindings: Bindings }>) => {
