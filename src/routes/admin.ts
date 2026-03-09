@@ -237,7 +237,12 @@ admin.delete("/api/submissions/:id", async (c) => {
  */
 admin.post("/api/submissions/:id/official", async (c) => {
   const id = c.req.param("id");
-  const body = await c.req.json<{ official: boolean }>();
+  let body: { official: boolean };
+  try {
+    body = await c.req.json<{ official: boolean }>();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
   const user = getAdminUser(c);
 
   const existing = await c.env.prod_pinchbench

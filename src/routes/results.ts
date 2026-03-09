@@ -150,13 +150,28 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
     const normalizedModel = normalizeModelName(payload.model);
 
     // Determine if this is an official run via the shared OFFICIAL_KEY secret
+    // Use constant-time HMAC comparison to avoid timing side-channel attacks
     const officialKeyHeader = c.req.header("X-PinchBench-Official-Key");
-    const isOfficial =
-      c.env.OFFICIAL_KEY &&
-      officialKeyHeader &&
-      officialKeyHeader === c.env.OFFICIAL_KEY
-        ? 1
-        : 0;
+    let isOfficial = 0;
+    if (c.env.OFFICIAL_KEY && officialKeyHeader) {
+      const encoder = new TextEncoder();
+      const hmacKey = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode("pinchbench"),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+      );
+      const [sigA, sigB] = await Promise.all([
+        crypto.subtle.sign("HMAC", hmacKey, encoder.encode(officialKeyHeader)),
+        crypto.subtle.sign("HMAC", hmacKey, encoder.encode(c.env.OFFICIAL_KEY)),
+      ]);
+      const a = new Uint8Array(sigA);
+      const b = new Uint8Array(sigB);
+      if (a.byteLength === b.byteLength && a.every((v, i) => v === b[i])) {
+        isOfficial = 1;
+      }
+    }
 
     const existing = await c.env.prod_pinchbench
       .prepare(
