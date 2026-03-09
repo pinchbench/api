@@ -7,6 +7,8 @@ import { registerLeaderboardRoutes } from "./routes/leaderboard";
 import { registerSubmissionRoutes } from "./routes/submissions";
 import { registerBenchmarkVersionRoutes } from "./routes/benchmarkVersions";
 import { registerProvidersRoutes } from "./routes/providers";
+import { registerClaimRoutes } from "./routes/claim";
+import { registerUserRoutes } from "./routes/users";
 import { admin } from "./routes/admin";
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -99,6 +101,10 @@ app.get("/", (c) => {
       "GET /api/stats": "Get aggregate statistics",
       "GET /api/benchmark_versions": "List all benchmark versions",
       "GET /api/benchmark_versions/latest": "Get the current benchmark version",
+      "GET /api/claim/github": "Initiate GitHub OAuth claim flow",
+      "GET /api/claim/github/callback": "GitHub OAuth callback (browser redirect)",
+      "POST /api/claim/refresh": "Refresh an expired claim code (requires auth)",
+      "GET /api/users/:github_username/submissions": "Public submissions for a GitHub user",
     },
   });
 });
@@ -109,6 +115,8 @@ registerLeaderboardRoutes(app);
 registerSubmissionRoutes(app);
 registerBenchmarkVersionRoutes(app);
 registerProvidersRoutes(app);
+registerClaimRoutes(app);
+registerUserRoutes(app);
 
 export default {
   fetch: app.fetch,

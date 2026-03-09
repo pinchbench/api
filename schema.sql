@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS tokens (
   claim_code TEXT,
   claim_expires_at TEXT,
   claimed_at TEXT,
+  github_id INTEGER,
+  github_username TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_used_at TEXT
 );

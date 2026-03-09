@@ -6,6 +6,8 @@ export type Bindings = {
   CF_ACCESS_AUD?: string;
   CF_ACCESS_BYPASS?: string;
   OFFICIAL_KEY?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
 };
 
 export type AdminUser = {
@@ -79,4 +81,5 @@ export type SubmissionRow = {
   metadata: string | null;
   official: number;
   claimed: number;
+  github_username: string | null;
 };

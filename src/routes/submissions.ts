@@ -198,7 +198,8 @@ export const registerSubmissionRoutes = (
           s.usage_summary,
           s.metadata,
           s.official,
-          CASE WHEN t.claimed_at IS NOT NULL THEN 1 ELSE 0 END as claimed
+          CASE WHEN t.claimed_at IS NOT NULL THEN 1 ELSE 0 END as claimed,
+          t.github_username
         FROM submissions s
         JOIN tokens t ON s.token_id = t.id
         WHERE s.id = ?
@@ -277,6 +278,7 @@ export const registerSubmissionRoutes = (
         metadata,
         verified: row.claimed === 1,
         official: row.official === 1,
+        verified_by: row.claimed === 1 ? (row.github_username ?? null) : null,
       },
       rank: rankRow?.rank ?? 0,
       total_submissions: totalRow?.total ?? 0,
