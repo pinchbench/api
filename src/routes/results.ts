@@ -149,12 +149,36 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
     // Normalize model name (strip "openrouter/" prefix)
     const normalizedModel = normalizeModelName(payload.model);
 
+    // Determine if this is an official run via the shared OFFICIAL_KEY secret
+    // Use constant-time HMAC comparison to avoid timing side-channel attacks
+    const officialKeyHeader = c.req.header("X-PinchBench-Official-Key");
+    let isOfficial = 0;
+    if (c.env.OFFICIAL_KEY && officialKeyHeader) {
+      const encoder = new TextEncoder();
+      const hmacKey = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode("pinchbench"),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+      );
+      const [sigA, sigB] = await Promise.all([
+        crypto.subtle.sign("HMAC", hmacKey, encoder.encode(officialKeyHeader)),
+        crypto.subtle.sign("HMAC", hmacKey, encoder.encode(c.env.OFFICIAL_KEY)),
+      ]);
+      const a = new Uint8Array(sigA);
+      const b = new Uint8Array(sigB);
+      if (a.byteLength === b.byteLength && a.every((v, i) => v === b[i])) {
+        isOfficial = 1;
+      }
+    }
+
     const existing = await c.env.prod_pinchbench
       .prepare(
-        "SELECT id, score_percentage FROM submissions WHERE id = ? LIMIT 1",
+        "SELECT id, score_percentage, official FROM submissions WHERE id = ? LIMIT 1",
       )
       .bind(payload.submission_id)
-      .first<{ id: string; score_percentage: number }>();
+      .first<{ id: string; score_percentage: number; official: number }>();
 
     const computedScorePercentage =
       payload.max_score === 0 ? 0 : payload.total_score / payload.max_score;
@@ -203,9 +227,10 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
             tasks,
             usage_summary,
             metadata,
+            official,
             created_at
           ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
           )`,
         )
         .bind(
@@ -229,6 +254,7 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
           JSON.stringify(payload.tasks ?? []),
           JSON.stringify(payload.usage_summary ?? null),
           JSON.stringify(payload.metadata ?? null),
+          isOfficial,
         )
         .run();
 
@@ -272,10 +298,15 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
     const percentile =
       totalSubmissions === 0 ? 0 : (lower / totalSubmissions) * 100;
 
+    const officialResult = existing
+      ? existing.official === 1
+      : isOfficial === 1;
+
     return c.json(
       {
         status: "accepted",
         submission_id: payload.submission_id,
+        official: officialResult,
         rank,
         percentile: Number(percentile.toFixed(2)),
         leaderboard_url: `https://pinchbench.com/submission/${payload.submission_id}`,

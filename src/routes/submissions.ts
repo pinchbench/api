@@ -28,6 +28,7 @@ export const registerSubmissionRoutes = (
     const model = c.req.query("model")?.trim();
     const provider = c.req.query("provider")?.trim();
     const verified = c.req.query("verified") === "true";
+    const official = c.req.query("official") === "true";
     const benchmarkVersions = await resolveBenchmarkVersions(c);
     const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
     const limit = Math.min(Math.max(1, limitParam), 100);
@@ -49,6 +50,7 @@ export const registerSubmissionRoutes = (
         s.client_version,
         s.openclaw_version,
         s.benchmark_version,
+        s.official,
         CASE WHEN t.claimed_at IS NOT NULL THEN 1 ELSE 0 END as claimed
       FROM submissions s
       JOIN tokens t ON s.token_id = t.id
@@ -69,6 +71,10 @@ export const registerSubmissionRoutes = (
 
     if (verified) {
       query += " AND t.claimed_at IS NOT NULL";
+    }
+
+    if (official) {
+      query += " AND s.official = 1";
     }
 
     if (benchmarkVersions.length > 0) {
@@ -120,6 +126,10 @@ export const registerSubmissionRoutes = (
     }
     if (verified) {
       countQuery += " AND t.claimed_at IS NOT NULL";
+    }
+
+    if (official) {
+      countQuery += " AND s.official = 1";
     }
 
     if (benchmarkVersions.length > 0) {
@@ -187,6 +197,7 @@ export const registerSubmissionRoutes = (
           s.tasks,
           s.usage_summary,
           s.metadata,
+          s.official,
           CASE WHEN t.claimed_at IS NOT NULL THEN 1 ELSE 0 END as claimed
         FROM submissions s
         JOIN tokens t ON s.token_id = t.id
@@ -265,6 +276,7 @@ export const registerSubmissionRoutes = (
         usage_summary: usageSummary,
         metadata,
         verified: row.claimed === 1,
+        official: row.official === 1,
       },
       rank: rankRow?.rank ?? 0,
       total_submissions: totalRow?.total ?? 0,
