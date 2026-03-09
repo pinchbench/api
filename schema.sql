@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   tasks TEXT NOT NULL,
   usage_summary TEXT,
   metadata TEXT,
+  official INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (token_id) REFERENCES tokens(id)
 );
@@ -53,6 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_submissions_model ON submissions(model);
 CREATE INDEX IF NOT EXISTS idx_submissions_provider ON submissions(provider);
 CREATE INDEX IF NOT EXISTS idx_submissions_timestamp ON submissions(timestamp);
 CREATE INDEX IF NOT EXISTS idx_submissions_score_percentage ON submissions(score_percentage);
+CREATE INDEX IF NOT EXISTS idx_submissions_official ON submissions(official);
 CREATE INDEX IF NOT EXISTS idx_token_registration_limits_ip ON token_registration_limits(ip);
 CREATE INDEX IF NOT EXISTS idx_token_registration_limits_created_at ON token_registration_limits(created_at);
 

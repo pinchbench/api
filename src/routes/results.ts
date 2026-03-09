@@ -149,6 +149,15 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
     // Normalize model name (strip "openrouter/" prefix)
     const normalizedModel = normalizeModelName(payload.model);
 
+    // Determine if this is an official run via the shared OFFICIAL_KEY secret
+    const officialKeyHeader = c.req.header("X-PinchBench-Official-Key");
+    const isOfficial =
+      c.env.OFFICIAL_KEY &&
+      officialKeyHeader &&
+      officialKeyHeader === c.env.OFFICIAL_KEY
+        ? 1
+        : 0;
+
     const existing = await c.env.prod_pinchbench
       .prepare(
         "SELECT id, score_percentage FROM submissions WHERE id = ? LIMIT 1",
@@ -203,9 +212,10 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
             tasks,
             usage_summary,
             metadata,
+            official,
             created_at
           ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
           )`,
         )
         .bind(
@@ -229,6 +239,7 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
           JSON.stringify(payload.tasks ?? []),
           JSON.stringify(payload.usage_summary ?? null),
           JSON.stringify(payload.metadata ?? null),
+          isOfficial,
         )
         .run();
 
@@ -276,6 +287,7 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
       {
         status: "accepted",
         submission_id: payload.submission_id,
+        official: isOfficial === 1,
         rank,
         percentile: Number(percentile.toFixed(2)),
         leaderboard_url: `https://pinchbench.com/submission/${payload.submission_id}`,

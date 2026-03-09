@@ -166,7 +166,7 @@ admin.get("/api/submissions", async (c) => {
     c.env.prod_pinchbench
       .prepare(
         `SELECT 
-          s.id, s.model, s.provider, s.score_percentage, s.benchmark_version, s.timestamp
+          s.id, s.model, s.provider, s.score_percentage, s.benchmark_version, s.timestamp, s.official
         FROM submissions s
         ORDER BY s.timestamp DESC
         LIMIT ? OFFSET ?`,
@@ -179,6 +179,7 @@ admin.get("/api/submissions", async (c) => {
         score_percentage: number;
         benchmark_version: string | null;
         timestamp: string;
+        official: number;
       }>(),
     c.env.prod_pinchbench
       .prepare("SELECT COUNT(*) as count FROM submissions")
@@ -228,6 +229,41 @@ admin.delete("/api/submissions/:id", async (c) => {
   );
 
   return c.json({ success: true });
+});
+
+/**
+ * POST /admin/api/submissions/:id/official
+ * Toggle official status on a submission
+ */
+admin.post("/api/submissions/:id/official", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ official: boolean }>();
+  const user = getAdminUser(c);
+
+  const existing = await c.env.prod_pinchbench
+    .prepare("SELECT id, official FROM submissions WHERE id = ?")
+    .bind(id)
+    .first<{ id: string; official: number }>();
+
+  if (!existing) {
+    return c.json({ error: "Submission not found" }, 404);
+  }
+
+  const newValue = body.official ? 1 : 0;
+
+  await c.env.prod_pinchbench
+    .prepare("UPDATE submissions SET official = ? WHERE id = ?")
+    .bind(newValue, id)
+    .run();
+
+  await logAdminAction(
+    c.env.prod_pinchbench,
+    user?.email ?? "unknown",
+    "toggle_submission_official",
+    { submission_id: id, official: body.official },
+  );
+
+  return c.json({ success: true, official: body.official });
 });
 
 // ============================================================================

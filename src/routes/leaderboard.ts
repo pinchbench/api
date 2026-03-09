@@ -23,6 +23,8 @@ export const registerLeaderboardRoutes = (
     
     const verified = c.req.query("verified") === "true";
     const verifiedFlag = verified ? 1 : 0;
+    const official = c.req.query("official") === "true";
+    const officialFlag = official ? 1 : 0;
     const providerFilter = c.req.query("provider")?.trim();
     const benchmarkVersions = await resolveBenchmarkVersions(c);
     const limitParam = parseInt(c.req.query("limit") ?? "50", 10);
@@ -46,15 +48,17 @@ export const registerLeaderboardRoutes = (
           JOIN tokens t2 ON s2.token_id = t2.id
           WHERE s2.model = s.model 
             AND (? = 0 OR t2.claimed_at IS NOT NULL)
+            AND (? = 0 OR s2.official = 1)
           ORDER BY s2.score_percentage DESC, s2.timestamp DESC, s2.id ASC
           LIMIT 1
         ) as best_submission_id
       FROM submissions s
       JOIN tokens t ON s.token_id = t.id
       WHERE (? = 0 OR t.claimed_at IS NOT NULL)
+        AND (? = 0 OR s.official = 1)
     `;
 
-    const bindings: (string | number)[] = [verifiedFlag];
+    const bindings: (string | number)[] = [verifiedFlag, officialFlag];
 
     if (benchmarkVersions.length > 0) {
       query = query.replace(
@@ -82,6 +86,7 @@ export const registerLeaderboardRoutes = (
     `;
     bindings.push(
       verifiedFlag,
+      officialFlag,
       ...benchmarkVersions,
       ...(providerFilter ? [providerFilter] : []),
       limit,
@@ -92,12 +97,15 @@ export const registerLeaderboardRoutes = (
       .bind(...bindings)
       .all<LeaderboardEntry>();
 
-    let totalModelsQuery = verified
-      ? "SELECT COUNT(DISTINCT s.model) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE t.claimed_at IS NOT NULL"
+    const needsJoin = verified || official;
+    let totalModelsQuery = needsJoin
+      ? `SELECT COUNT(DISTINCT s.model) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE (? = 0 OR t.claimed_at IS NOT NULL) AND (? = 0 OR s.official = 1)`
       : "SELECT COUNT(DISTINCT model) as count FROM submissions";
-    const totalModelsBindings: (string | number)[] = [];
+    const totalModelsBindings: (string | number)[] = needsJoin
+      ? [verifiedFlag, officialFlag]
+      : [];
     if (benchmarkVersions.length > 0) {
-      totalModelsQuery += verified
+      totalModelsQuery += needsJoin
         ? appendBenchmarkVersionFilter(
             "AND",
             "s.benchmark_version",
@@ -119,6 +127,7 @@ export const registerLeaderboardRoutes = (
       leaderboard: results.results ?? [],
       total_models: totalModels?.count ?? 0,
       verified_only: verified,
+      official_only: official,
       benchmark_version:
         benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
       benchmark_versions: benchmarkVersions,

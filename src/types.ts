@@ -5,6 +5,7 @@ export type Bindings = {
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
   CF_ACCESS_BYPASS?: string;
+  OFFICIAL_KEY?: string;
 };
 
 export type AdminUser = {
@@ -76,5 +77,6 @@ export type SubmissionRow = {
   tasks: string;
   usage_summary: string | null;
   metadata: string | null;
+  official: number;
   claimed: number;
 };
