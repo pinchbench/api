@@ -335,7 +335,8 @@ export const adminHTML = `<!DOCTYPE html>
       provider: s => s.provider || '',
       score_percentage: s => s.score_percentage,
       benchmark_version: s => s.benchmark_version || '',
-      timestamp: s => new Date(s.timestamp)
+      timestamp: s => new Date(s.timestamp),
+      official: s => s.official
     };
 
     function sortSubmissions(column) {
@@ -404,6 +405,7 @@ export const adminHTML = `<!DOCTYPE html>
       html += '<th class="' + sortClass('model') + '" onclick="sortSubmissions(\\'model\\')">Model</th>';
       html += '<th class="' + sortClass('provider') + '" onclick="sortSubmissions(\\'provider\\')">Provider</th>';
       html += '<th class="' + sortClass('score_percentage') + '" onclick="sortSubmissions(\\'score_percentage\\')">Score</th>';
+      html += '<th class="' + sortClass('official') + '" onclick="sortSubmissions(\\'official\\')">Official</th>';
       html += '<th class="' + sortClass('benchmark_version') + '" onclick="sortSubmissions(\\'benchmark_version\\')">Version</th>';
       html += '<th class="' + sortClass('timestamp') + '" onclick="sortSubmissions(\\'timestamp\\')">Date</th>';
       html += '<th>Actions</th>';
@@ -415,9 +417,17 @@ export const adminHTML = `<!DOCTYPE html>
         html += '<td>' + s.model + '</td>';
         html += '<td>' + (s.provider || '-') + '</td>';
         html += '<td>' + (s.score_percentage * 100).toFixed(1) + '%</td>';
+        html += '<td>' + (s.official ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>') + '</td>';
         html += '<td class="mono">' + (s.benchmark_version || '-') + '</td>';
         html += '<td>' + new Date(s.timestamp).toLocaleDateString() + '</td>';
-        html += '<td><button class="btn btn-danger" onclick="deleteSubmission(\\'' + s.id + '\\')">Delete</button></td>';
+        html += '<td>';
+        if (s.official) {
+          html += '<button class="btn btn-secondary" onclick="toggleSubmissionOfficial(\\'' + s.id + '\\', false)">Mark Unofficial</button> ';
+        } else {
+          html += '<button class="btn btn-primary" onclick="toggleSubmissionOfficial(\\'' + s.id + '\\', true)">Mark Official</button> ';
+        }
+        html += '<button class="btn btn-danger" onclick="deleteSubmission(\\'' + s.id + '\\')">Delete</button>';
+        html += '</td>';
         html += '</tr>';
       });
       html += '</tbody></table>';
@@ -443,6 +453,19 @@ export const adminHTML = `<!DOCTYPE html>
       try {
         await api('/submissions/' + id, { method: 'DELETE' });
         showAlert('Submission deleted');
+        loadSubmissions(currentSubmissionsPage);
+      } catch (err) {
+        showAlert(err.message, 'error');
+      }
+    }
+
+    async function toggleSubmissionOfficial(id, official) {
+      try {
+        await api('/submissions/' + id + '/official', {
+          method: 'POST',
+          body: JSON.stringify({ official: official })
+        });
+        showAlert('Submission ' + id + ' is now ' + (official ? 'official' : 'unofficial'));
         loadSubmissions(currentSubmissionsPage);
       } catch (err) {
         showAlert(err.message, 'error');
