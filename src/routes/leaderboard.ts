@@ -150,7 +150,7 @@ export const registerLeaderboardRoutes = (
 
     let query = `
       SELECT 
-        s.model,
+        REPLACE(s.model, ':free', '') as model,
         s.provider,
         COUNT(*) as submission_count,
         MAX(s.score_percentage) as best_score,
@@ -178,7 +178,7 @@ export const registerLeaderboardRoutes = (
     }
 
     query += `
-      GROUP BY s.model, s.provider
+      GROUP BY REPLACE(s.model, ':free', ''), s.provider
       ORDER BY submission_count DESC
     `;
 
