@@ -438,7 +438,7 @@ export const adminHTML = `<!DOCTYPE html>
       
       submissions.forEach(s => {
         html += '<tr>';
-        html += '<td class="mono">' + s.id.slice(0, 8) + '...</td>';
+        html += '<td class="mono"><a href="https://pinchbench.com/submission/' + s.id + '" target="_blank" rel="noopener" style="color: #79c0ff; text-decoration: none;">' + s.id.slice(0, 8) + '...</a></td>';
         html += '<td>' + s.model + '</td>';
         html += '<td>' + (s.provider || '-') + '</td>';
         html += '<td>' + (s.score_percentage * 100).toFixed(1) + '%</td>';
