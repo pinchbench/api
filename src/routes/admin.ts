@@ -319,7 +319,7 @@ admin.get("/api/models/metadata", async (c) => {
     .all<{ model: string; provider: string | null }>();
 
   const models = (results.results ?? []).map((row) => {
-    const meta = getModelMetadata(row.model, row.provider ?? undefined);
+    const meta = getModelMetadata(row.model, row.provider);
     return {
       model: row.model,
       provider: row.provider ?? meta?.provider ?? "unknown",
