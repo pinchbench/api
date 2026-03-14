@@ -4,6 +4,7 @@ import {
   resolveBenchmarkVersions,
   appendBenchmarkVersionFilter,
 } from "../utils/query";
+import { getModelMetadata } from "../utils/modelMetadata";
 
 export const registerProvidersRoutes = (app: Hono<{ Bindings: Bindings }>) => {
   /**
@@ -104,9 +105,18 @@ export const registerProvidersRoutes = (app: Hono<{ Bindings: Bindings }>) => {
       .bind(...bindings)
       .all();
 
+    const models = (results.results ?? []).map((row) => {
+      const meta = getModelMetadata(row.model as string, row.provider as string);
+      return {
+        ...row,
+        weights: meta?.weights ?? "Unknown",
+        hf_link: meta?.hf_link ?? null,
+      };
+    });
+
     return c.json({
       provider,
-      models: results.results ?? [],
+      models,
       benchmark_version:
         benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
       benchmark_versions: benchmarkVersions,

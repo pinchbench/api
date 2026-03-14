@@ -58,6 +58,8 @@ export const adminHTML = `<!DOCTYPE html>
     .page-size-selector select { padding: 8px 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #e6edf3; font-size: 14px; cursor: pointer; }
     .page-size-selector select:focus { outline: none; border-color: #238636; }
     .no-results { text-align: center; padding: 40px; color: #8b949e; }
+    .link { color: #79c0ff; text-decoration: none; }
+    .link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -72,6 +74,7 @@ export const adminHTML = `<!DOCTYPE html>
     <div class="tabs">
       <button class="tab" data-tab="versions">Benchmark Versions</button>
       <button class="tab" data-tab="submissions">Submissions</button>
+      <button class="tab" data-tab="models">Models</button>
       <button class="tab" data-tab="tokens">Tokens</button>
       <button class="tab" data-tab="users">Users</button>
     </div>
@@ -104,6 +107,16 @@ export const adminHTML = `<!DOCTYPE html>
         <button class="btn btn-danger" onclick="deleteZeroPercentSubmissions()">Delete all 0%</button>
       </div>
       <div id="submissions-content"><div class="loading">Loading...</div></div>
+    </div>
+
+    <div id="models" class="panel">
+      <h2 style="margin-bottom: 15px;">Models</h2>
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="models-search" placeholder="Search by model, provider, or weights..." oninput="filterModels()">
+        </div>
+      </div>
+      <div id="models-content"><div class="loading">Loading...</div></div>
     </div>
 
     <div id="tokens" class="panel">
@@ -157,6 +170,7 @@ export const adminHTML = `<!DOCTYPE html>
     // Store full data for client-side filtering and sorting
     let allVersions = [];
     let allSubmissions = [];
+    let allModels = [];
     let allTokens = [];
     let allUsers = [];
     let totalSubmissions = 0;
@@ -166,6 +180,7 @@ export const adminHTML = `<!DOCTYPE html>
     // Sort state for each table: { column: string, direction: 'asc' | 'desc' }
     let versionsSort = { column: 'created_at', direction: 'desc' };
     let submissionsSort = { column: 'timestamp', direction: 'desc' };
+    let modelsSort = { column: 'model', direction: 'asc' };
     let tokensSort = { column: 'created_at', direction: 'desc' };
     let usersSort = { column: 'submission_count', direction: 'desc' };
 
@@ -211,7 +226,7 @@ export const adminHTML = `<!DOCTYPE html>
 
     function getTabFromHash() {
       const hash = window.location.hash.slice(1);
-      const validTabs = ['versions', 'submissions', 'tokens', 'users'];
+      const validTabs = ['versions', 'submissions', 'models', 'tokens', 'users'];
       return validTabs.includes(hash) ? hash : 'versions';
     }
 
@@ -508,6 +523,90 @@ export const adminHTML = `<!DOCTYPE html>
       }
     }
 
+    // ========== MODELS ==========
+    const modelsGetters = {
+      model: m => m.model,
+      provider: m => m.provider,
+      weights: m => m.weights,
+      hf_link: m => m.hf_link || ''
+    };
+
+    function sortModels(column) {
+      if (modelsSort.column === column) {
+        modelsSort.direction = modelsSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        modelsSort.column = column;
+        modelsSort.direction = 'asc';
+      }
+      filterModels();
+    }
+
+    async function loadModels() {
+      try {
+        const data = await api('/models/metadata');
+        allModels = data.models;
+        filterModels();
+      } catch (err) {
+        document.getElementById('models-content').innerHTML = '<div class="error">' + err.message + '</div>';
+      }
+    }
+
+    function filterModels() {
+      const query = document.getElementById('models-search').value.toLowerCase().trim();
+      let filtered = allModels;
+      if (query) {
+        filtered = allModels.filter(m => {
+          return m.model.toLowerCase().includes(query) ||
+                 (m.provider && m.provider.toLowerCase().includes(query)) ||
+                 (m.weights && m.weights.toLowerCase().includes(query));
+        });
+      }
+      const sorted = sortData(filtered, modelsSort.column, modelsSort.direction, modelsGetters);
+      renderModels(sorted);
+    }
+
+    function renderModels(models) {
+      if (!models.length) {
+        const query = document.getElementById('models-search').value;
+        document.getElementById('models-content').innerHTML = query
+          ? '<div class="no-results">No models match your search.</div>'
+          : '<p>No models found.</p>';
+        return;
+      }
+
+      function sortClass(col) {
+        if (modelsSort.column !== col) return 'sortable';
+        return 'sortable sort-' + modelsSort.direction;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th class="' + sortClass('model') + '" onclick="sortModels(\\'model\\')">Model</th>';
+      html += '<th class="' + sortClass('provider') + '" onclick="sortModels(\\'provider\\')">Provider</th>';
+      html += '<th class="' + sortClass('weights') + '" onclick="sortModels(\\'weights\\')">Weights</th>';
+      html += '<th class="' + sortClass('hf_link') + '" onclick="sortModels(\\'hf_link\\')">HF Link</th>';
+      html += '</tr></thead><tbody>';
+
+      models.forEach(m => {
+        let weightsBadge = '<span class="badge badge-gray">Unknown</span>';
+        if (m.weights === 'Open') {
+          weightsBadge = '<span class="badge badge-green">Open</span>';
+        } else if (m.weights === 'Closed') {
+          weightsBadge = '<span class="badge badge-red">Closed</span>';
+        }
+        const hfLink = m.hf_link
+          ? '<a class="link" href="' + m.hf_link + '" target="_blank" rel="noopener">Hugging Face ↗</a>'
+          : '-';
+        html += '<tr>';
+        html += '<td class="mono">' + m.model + '</td>';
+        html += '<td>' + (m.provider || '-') + '</td>';
+        html += '<td>' + weightsBadge + '</td>';
+        html += '<td>' + hfLink + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      document.getElementById('models-content').innerHTML = html;
+    }
+
     // ========== TOKENS ==========
     const tokensGetters = {
       id: t => t.id,
@@ -788,6 +887,7 @@ export const adminHTML = `<!DOCTYPE html>
       }
       loadVersions();
       loadSubmissions();
+      loadModels();
       loadTokens();
       loadUsers();
     }

@@ -5,6 +5,7 @@ import {
   resolveBenchmarkVersions,
   appendBenchmarkVersionFilter,
 } from "../utils/query";
+import { getModelMetadata } from "../utils/modelMetadata";
 
 export const registerSubmissionRoutes = (
   app: Hono<{ Bindings: Bindings }>,
@@ -146,8 +147,17 @@ export const registerSubmissionRoutes = (
       .bind(...countBindings)
       .first<{ total: number }>();
 
+    const submissions = (results.results ?? []).map((row) => {
+      const meta = getModelMetadata(row.model as string, row.provider as string);
+      return {
+        ...row,
+        weights: meta?.weights ?? "Unknown",
+        hf_link: meta?.hf_link ?? null,
+      };
+    });
+
     return c.json({
-      submissions: results.results ?? [],
+      submissions,
       total: totalRow?.total ?? 0,
       limit,
       offset,
@@ -259,11 +269,15 @@ export const registerSubmissionRoutes = (
       );
     }
 
+    const modelMetadata = getModelMetadata(row.model, row.provider);
+
     return c.json({
       submission: {
         id: row.id,
         model: row.model,
         provider: row.provider,
+        weights: modelMetadata?.weights ?? "Unknown",
+        hf_link: modelMetadata?.hf_link ?? null,
         score_percentage: row.score_percentage,
         total_score: row.total_score,
         max_score: row.max_score,
@@ -403,9 +417,13 @@ export const registerSubmissionRoutes = (
       is_best: row.id === bestSubmissionId,
     }));
 
+    const modelMetadata = getModelMetadata(model, null);
+
     return c.json({
       submissions,
       model,
+      weights: modelMetadata?.weights ?? "Unknown",
+      hf_link: modelMetadata?.hf_link ?? null,
       benchmark_version:
         benchmarkVersions.length === 1 ? benchmarkVersions[0] : null,
       benchmark_versions: benchmarkVersions,
@@ -506,8 +524,17 @@ export const registerSubmissionRoutes = (
       .bind(tokenRow.id, ...benchmarkVersions)
       .first<{ total: number }>();
 
+    const submissions = (results.results ?? []).map((row) => {
+      const meta = getModelMetadata(row.model as string, row.provider as string);
+      return {
+        ...row,
+        weights: meta?.weights ?? "Unknown",
+        hf_link: meta?.hf_link ?? null,
+      };
+    });
+
     return c.json({
-      submissions: results.results ?? [],
+      submissions,
       total: totalRow?.total ?? 0,
       limit,
       offset,
