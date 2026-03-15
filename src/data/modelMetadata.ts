@@ -37,7 +37,7 @@ export const MODEL_METADATA = [
     hf_link: "https://huggingface.co/moonshotai/Kimi-K2.5",
   },
   {
-    model: "qwen/qwen3.5-122b-a19b",
+    model: "qwen/qwen3.5-122b-a10b",
     provider: "qwen",
     weights: "Open",
     hf_link: "https://huggingface.co/Qwen/Qwen3.5-122B-A10B",
