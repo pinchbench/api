@@ -57,9 +57,16 @@ export const adminHTML = `<!DOCTYPE html>
     .page-size-selector label { font-size: 13px; color: #8b949e; }
     .page-size-selector select { padding: 8px 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #e6edf3; font-size: 14px; cursor: pointer; }
     .page-size-selector select:focus { outline: none; border-color: #238636; }
+    .checkbox-filter { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b949e; }
+    .checkbox-filter input { accent-color: #238636; }
     .no-results { text-align: center; padding: 40px; color: #8b949e; }
     .link { color: #79c0ff; text-decoration: none; }
     .link:hover { text-decoration: underline; }
+    .chart-card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+    .chart-header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .chart-title { font-size: 16px; color: #e6edf3; font-weight: 600; }
+    .chart-meta { font-size: 12px; color: #8b949e; }
+    .chart-canvas { width: 100%; height: 260px; display: block; }
   </style>
 </head>
 <body>
@@ -74,6 +81,7 @@ export const adminHTML = `<!DOCTYPE html>
     <div class="tabs">
       <button class="tab" data-tab="versions">Benchmark Versions</button>
       <button class="tab" data-tab="submissions">Submissions</button>
+      <button class="tab" data-tab="graphs">Graphs</button>
       <button class="tab" data-tab="models">Models</button>
       <button class="tab" data-tab="tokens">Tokens</button>
       <button class="tab" data-tab="users">Users</button>
@@ -104,9 +112,32 @@ export const adminHTML = `<!DOCTYPE html>
             <option value="all">All</option>
           </select>
         </div>
+        <label class="checkbox-filter" for="submissions-official-only">
+          <input type="checkbox" id="submissions-official-only" onchange="applySubmissionsOfficialFilter()">
+          Official only
+        </label>
         <button class="btn btn-danger" onclick="deleteZeroPercentSubmissions()">Delete all 0%</button>
       </div>
       <div id="submissions-content"><div class="loading">Loading...</div></div>
+    </div>
+
+    <div id="graphs" class="panel">
+      <h2 style="margin-bottom: 15px;">Graphs</h2>
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Submissions per day</div>
+          <div class="page-size-selector">
+            <label for="submissions-per-day-filter">Show:</label>
+            <select id="submissions-per-day-filter" onchange="loadSubmissionsPerDayGraph()">
+              <option value="all">All submissions</option>
+              <option value="true">Official only</option>
+              <option value="false">Unofficial only</option>
+            </select>
+          </div>
+          <div id="submissions-per-day-meta" class="chart-meta"></div>
+        </div>
+        <canvas id="submissions-per-day-chart" class="chart-canvas"></canvas>
+      </div>
     </div>
 
     <div id="models" class="panel">
@@ -226,7 +257,7 @@ export const adminHTML = `<!DOCTYPE html>
 
     function getTabFromHash() {
       const hash = window.location.hash.slice(1);
-      const validTabs = ['versions', 'submissions', 'models', 'tokens', 'users'];
+      const validTabs = ['versions', 'submissions', 'graphs', 'models', 'tokens', 'users'];
       return validTabs.includes(hash) ? hash : 'versions';
     }
 
@@ -402,7 +433,9 @@ export const adminHTML = `<!DOCTYPE html>
       currentSubmissionsPage = page;
       document.getElementById('submissions-content').innerHTML = '<div class="loading">Loading...</div>';
       try {
-        const data = await api('/submissions?limit=' + submissionsPageSize + '&offset=' + (page * submissionsPageSize));
+        const officialOnly = document.getElementById('submissions-official-only').checked;
+        const officialParam = officialOnly ? '&official=true' : '';
+        const data = await api('/submissions?limit=' + submissionsPageSize + '&offset=' + (page * submissionsPageSize) + officialParam);
         allSubmissions = data.submissions;
         totalSubmissions = data.total;
         filterSubmissions();
@@ -411,11 +444,16 @@ export const adminHTML = `<!DOCTYPE html>
       }
     }
 
+    function applySubmissionsOfficialFilter() {
+      currentSubmissionsPage = 0;
+      loadSubmissions(0);
+    }
+
     function filterSubmissions() {
       const query = document.getElementById('submissions-search').value.toLowerCase().trim();
       let filtered = allSubmissions;
       if (query) {
-        filtered = allSubmissions.filter(s => {
+        filtered = filtered.filter(s => {
           return s.id.toLowerCase().includes(query) ||
                  s.model.toLowerCase().includes(query) ||
                  (s.provider && s.provider.toLowerCase().includes(query)) ||
@@ -423,14 +461,16 @@ export const adminHTML = `<!DOCTYPE html>
         });
       }
       const sorted = sortData(filtered, submissionsSort.column, submissionsSort.direction, submissionsGetters);
-      renderSubmissions(sorted, query ? sorted.length : totalSubmissions, !!query);
+      const isFiltered = !!query;
+      renderSubmissions(sorted, isFiltered ? sorted.length : totalSubmissions, isFiltered);
     }
 
     function renderSubmissions(submissions, total, isFiltered = false) {
       if (!submissions.length) {
         const query = document.getElementById('submissions-search').value;
-        document.getElementById('submissions-content').innerHTML = query 
-          ? '<div class="no-results">No submissions match your search.</div>' 
+        const officialOnly = document.getElementById('submissions-official-only').checked;
+        document.getElementById('submissions-content').innerHTML = (query || officialOnly)
+          ? '<div class="no-results">No submissions match your filter.</div>' 
           : '<p>No submissions found.</p>';
         return;
       }
@@ -896,6 +936,125 @@ export const adminHTML = `<!DOCTYPE html>
       document.getElementById('users-content').innerHTML = html;
     }
 
+    // ========== GRAPHS ==========
+    function formatDateLabel(date) {
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function buildDailySeries(points) {
+      if (!points.length) return { labels: [], values: [] };
+      const map = new Map(points.map(p => [p.day, p.count]));
+      const start = new Date(points[0].day + 'T00:00:00Z');
+      const end = new Date(points[points.length - 1].day + 'T00:00:00Z');
+      const labels = [];
+      const values = [];
+      for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+        const key = d.toISOString().slice(0, 10);
+        labels.push(formatDateLabel(d));
+        values.push(map.get(key) ?? 0);
+      }
+      return { labels, values };
+    }
+
+    function drawLineChart(canvas, labels, values) {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const parent = canvas.parentElement;
+      const width = parent ? parent.clientWidth : 600;
+      const height = 260;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+      canvas.style.height = height + 'px';
+      canvas.style.width = width + 'px';
+      ctx.scale(ratio, ratio);
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#0d1117';
+      ctx.fillRect(0, 0, width, height);
+
+      const padding = { top: 16, right: 16, bottom: 28, left: 40 };
+      const chartWidth = width - padding.left - padding.right;
+      const chartHeight = height - padding.top - padding.bottom;
+      const maxValue = Math.max(1, ...values);
+
+      ctx.strokeStyle = '#21262d';
+      ctx.lineWidth = 1;
+      const gridLines = 4;
+      for (let i = 0; i <= gridLines; i++) {
+        const y = padding.top + (chartHeight * i) / gridLines;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(width - padding.right, y);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#8b949e';
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= gridLines; i++) {
+        const value = Math.round(maxValue - (maxValue * i) / gridLines);
+        const y = padding.top + (chartHeight * i) / gridLines;
+        ctx.fillText(String(value), padding.left - 6, y);
+      }
+
+      if (!values.length) return;
+
+      ctx.strokeStyle = '#79c0ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      values.forEach((value, idx) => {
+        const x = padding.left + (chartWidth * idx) / Math.max(1, values.length - 1);
+        const y = padding.top + chartHeight - (value / maxValue) * chartHeight;
+        if (idx === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(121, 192, 255, 0.2)';
+      ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+      ctx.lineTo(padding.left, padding.top + chartHeight);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(121, 192, 255, 0.08)';
+      ctx.fill();
+
+      const labelCount = Math.min(6, labels.length);
+      ctx.fillStyle = '#8b949e';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for (let i = 0; i < labelCount; i++) {
+        const idx = Math.round((labels.length - 1) * (i / Math.max(1, labelCount - 1)));
+        const x = padding.left + (chartWidth * idx) / Math.max(1, labels.length - 1);
+        ctx.fillText(labels[idx], x, padding.top + chartHeight + 6);
+      }
+    }
+
+    async function loadSubmissionsPerDayGraph() {
+      const filter = document.getElementById('submissions-per-day-filter').value;
+      const meta = document.getElementById('submissions-per-day-meta');
+      const canvas = document.getElementById('submissions-per-day-chart');
+      meta.textContent = 'Loading...';
+      try {
+        const data = await api('/graphs/submissions-per-day?official=' + encodeURIComponent(filter));
+        const points = data.points || [];
+        const { labels, values } = buildDailySeries(points);
+        drawLineChart(canvas, labels, values);
+        if (!points.length) {
+          meta.textContent = 'No data available.';
+        } else {
+          const total = values.reduce((sum, val) => sum + val, 0);
+          const days = values.length;
+          meta.textContent = total + ' submissions across ' + days + ' days.';
+        }
+      } catch (err) {
+        meta.textContent = 'Failed to load graph.';
+      }
+    }
+
     // ========== INIT ==========
     async function init() {
       try {
@@ -906,6 +1065,7 @@ export const adminHTML = `<!DOCTYPE html>
       }
       loadVersions();
       loadSubmissions();
+      loadSubmissionsPerDayGraph();
       loadModels();
       loadTokens();
       loadUsers();

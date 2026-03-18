@@ -163,6 +163,9 @@ admin.get("/api/submissions", async (c) => {
     Math.max(1, parseInt(c.req.query("limit") ?? "20", 10)),
   );
   const offset = Math.max(0, parseInt(c.req.query("offset") ?? "0", 10));
+  const official = c.req.query("official") === "true";
+
+  const officialWhere = official ? "WHERE s.official = 1" : "";
 
   const [results, countRow] = await Promise.all([
     c.env.prod_pinchbench
@@ -170,6 +173,7 @@ admin.get("/api/submissions", async (c) => {
         `SELECT 
           s.id, s.model, s.provider, s.score_percentage, s.benchmark_version, s.timestamp, s.official
         FROM submissions s
+        ${officialWhere}
         ORDER BY s.timestamp DESC
         LIMIT ? OFFSET ?`,
       )
@@ -184,7 +188,7 @@ admin.get("/api/submissions", async (c) => {
         official: number;
       }>(),
     c.env.prod_pinchbench
-      .prepare("SELECT COUNT(*) as count FROM submissions")
+      .prepare(`SELECT COUNT(*) as count FROM submissions s ${officialWhere}`)
       .first<{ count: number }>(),
   ]);
 
@@ -226,6 +230,37 @@ admin.delete("/api/submissions/zero-percent", async (c) => {
   );
 
   return c.json({ success: true, deleted: deletedCount });
+});
+
+/**
+ * GET /admin/api/graphs/submissions-per-day
+ * Returns submissions per day for graphs
+ * Query params:
+ *   - official: "all" (default), "true", or "false"
+ */
+admin.get("/api/graphs/submissions-per-day", async (c) => {
+  const officialParam = c.req.query("official") ?? "all";
+  let officialWhere = "";
+
+  if (officialParam === "true") {
+    officialWhere = "WHERE s.official = 1";
+  } else if (officialParam === "false") {
+    officialWhere = "WHERE s.official = 0";
+  }
+
+  const results = await c.env.prod_pinchbench
+    .prepare(
+      `SELECT date(s.timestamp) as day, COUNT(*) as count
+       FROM submissions s
+       ${officialWhere}
+       GROUP BY date(s.timestamp)
+       ORDER BY date(s.timestamp) ASC`,
+    )
+    .all<{ day: string; count: number }>();
+
+  return c.json({
+    points: results.results ?? [],
+  });
 });
 
 /**
