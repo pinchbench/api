@@ -57,8 +57,6 @@ export const adminHTML = `<!DOCTYPE html>
     .page-size-selector label { font-size: 13px; color: #8b949e; }
     .page-size-selector select { padding: 8px 12px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #e6edf3; font-size: 14px; cursor: pointer; }
     .page-size-selector select:focus { outline: none; border-color: #238636; }
-    .checkbox-filter { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b949e; }
-    .checkbox-filter input { accent-color: #238636; }
     .no-results { text-align: center; padding: 40px; color: #8b949e; }
     .link { color: #79c0ff; text-decoration: none; }
     .link:hover { text-decoration: underline; }
@@ -112,10 +110,14 @@ export const adminHTML = `<!DOCTYPE html>
             <option value="all">All</option>
           </select>
         </div>
-        <label class="checkbox-filter" for="submissions-official-only">
-          <input type="checkbox" id="submissions-official-only" onchange="applySubmissionsOfficialFilter()">
-          Official only
-        </label>
+        <div class="page-size-selector">
+          <label for="submissions-official-filter">Type:</label>
+          <select id="submissions-official-filter" onchange="applySubmissionsOfficialFilter()">
+            <option value="all">All submissions</option>
+            <option value="true">Official only</option>
+            <option value="false">Unofficial only</option>
+          </select>
+        </div>
         <button class="btn btn-danger" onclick="deleteZeroPercentSubmissions()">Delete all 0%</button>
       </div>
       <div id="submissions-content"><div class="loading">Loading...</div></div>
@@ -433,8 +435,8 @@ export const adminHTML = `<!DOCTYPE html>
       currentSubmissionsPage = page;
       document.getElementById('submissions-content').innerHTML = '<div class="loading">Loading...</div>';
       try {
-        const officialOnly = document.getElementById('submissions-official-only').checked;
-        const officialParam = officialOnly ? '&official=true' : '';
+        const officialFilter = document.getElementById('submissions-official-filter').value;
+        const officialParam = officialFilter !== 'all' ? '&official=' + encodeURIComponent(officialFilter) : '';
         const data = await api('/submissions?limit=' + submissionsPageSize + '&offset=' + (page * submissionsPageSize) + officialParam);
         allSubmissions = data.submissions;
         totalSubmissions = data.total;
@@ -468,8 +470,8 @@ export const adminHTML = `<!DOCTYPE html>
     function renderSubmissions(submissions, total, isFiltered = false) {
       if (!submissions.length) {
         const query = document.getElementById('submissions-search').value;
-        const officialOnly = document.getElementById('submissions-official-only').checked;
-        document.getElementById('submissions-content').innerHTML = (query || officialOnly)
+        const officialFilter = document.getElementById('submissions-official-filter').value;
+        document.getElementById('submissions-content').innerHTML = (query || officialFilter !== 'all')
           ? '<div class="no-results">No submissions match your filter.</div>' 
           : '<p>No submissions found.</p>';
         return;
