@@ -163,9 +163,14 @@ admin.get("/api/submissions", async (c) => {
     Math.max(1, parseInt(c.req.query("limit") ?? "20", 10)),
   );
   const offset = Math.max(0, parseInt(c.req.query("offset") ?? "0", 10));
-  const official = c.req.query("official") === "true";
+  const officialParam = c.req.query("official") ?? "all";
 
-  const officialWhere = official ? "WHERE s.official = 1" : "";
+  let officialWhere = "";
+  if (officialParam === "true") {
+    officialWhere = "WHERE s.official = 1";
+  } else if (officialParam === "false") {
+    officialWhere = "WHERE s.official = 0";
+  }
 
   const [results, countRow] = await Promise.all([
     c.env.prod_pinchbench
