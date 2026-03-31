@@ -66,12 +66,26 @@ app.use("/api/*", async (c, next) => {
 app.use(
   "/api/*",
   cors({
-    origin: [
-      "https://pinchbench.com",
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "null",
-    ],
+    origin: (origin) => {
+      // Allow known production and local origins
+      const allowedOrigins = [
+        "https://pinchbench.com",
+        "http://localhost:3000",
+        "http://localhost:5173",
+      ];
+      if (allowedOrigins.includes(origin)) {
+        return origin;
+      }
+      // Allow Vercel preview deployments (*.vercel.app)
+      if (origin && origin.endsWith(".vercel.app")) {
+        return origin;
+      }
+      // Allow null origin (for file:// or sandboxed iframes)
+      if (origin === "null") {
+        return "null";
+      }
+      return null;
+    },
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: [
       "Content-Type",
