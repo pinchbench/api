@@ -1,6 +1,16 @@
 import type { Hono } from "hono";
 import type { Bindings } from "../types";
 
+const getLabel = (
+  label: string | null,
+  semver: string | null,
+  id: string,
+): string => {
+  if (label) return label;
+  if (semver) return semver;
+  return id.slice(0, 8);
+};
+
 export const registerBenchmarkVersionRoutes = (
   app: Hono<{ Bindings: Bindings }>,
 ) => {
@@ -16,14 +26,26 @@ export const registerBenchmarkVersionRoutes = (
           id, 
           created_at,
           current,
-          hidden
+          hidden,
+          semver,
+          label,
+          release_notes,
+          release_url
         FROM benchmark_versions
         WHERE hidden = 0
         ORDER BY created_at DESC`,
       )
-      .all<{ id: string; created_at: string; current: number; hidden: number }>();
+      .all<{
+        id: string;
+        created_at: string;
+        current: number;
+        hidden: number;
+        semver: string | null;
+        label: string | null;
+        release_notes: string | null;
+        release_url: string | null;
+      }>();
 
-    // Get submission counts for each version
     const versionsWithCounts = await Promise.all(
       (versions.results ?? []).map(async (version) => {
         const countRow = await c.env.prod_pinchbench
@@ -35,6 +57,10 @@ export const registerBenchmarkVersionRoutes = (
         return {
           id: version.id,
           created_at: version.created_at,
+          semver: version.semver,
+          label: getLabel(version.label, version.semver, version.id),
+          release_notes: version.release_notes,
+          release_url: version.release_url,
           is_current: version.current === 1,
           submission_count: countRow?.count ?? 0,
         };
@@ -58,13 +84,25 @@ export const registerBenchmarkVersionRoutes = (
         `SELECT 
           id, 
           created_at,
-          current
+          current,
+          semver,
+          label,
+          release_notes,
+          release_url
         FROM benchmark_versions
         WHERE current = 1 AND hidden = 0
         ORDER BY created_at DESC
         LIMIT 1`,
       )
-      .first<{ id: string; created_at: string; current: number }>();
+      .first<{
+        id: string;
+        created_at: string;
+        current: number;
+        semver: string | null;
+        label: string | null;
+        release_notes: string | null;
+        release_url: string | null;
+      }>();
 
     if (!currentVersion) {
       return c.json(
@@ -88,6 +126,14 @@ export const registerBenchmarkVersionRoutes = (
       version: {
         id: currentVersion.id,
         created_at: currentVersion.created_at,
+        semver: currentVersion.semver,
+        label: getLabel(
+          currentVersion.label,
+          currentVersion.semver,
+          currentVersion.id,
+        ),
+        release_notes: currentVersion.release_notes,
+        release_url: currentVersion.release_url,
         is_current: true,
         submission_count: countRow?.count ?? 0,
       },
