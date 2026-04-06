@@ -14,6 +14,10 @@ export const registerBenchmarkVersionRoutes = (
       .prepare(
         `SELECT 
           id, 
+          semver,
+          label,
+          release_notes,
+          release_url,
           created_at,
           current,
           hidden
@@ -21,9 +25,17 @@ export const registerBenchmarkVersionRoutes = (
         WHERE hidden = 0
         ORDER BY created_at DESC`,
       )
-      .all<{ id: string; created_at: string; current: number; hidden: number }>();
+      .all<{
+        id: string;
+        semver: string | null;
+        label: string | null;
+        release_notes: string | null;
+        release_url: string | null;
+        created_at: string;
+        current: number;
+        hidden: number;
+      }>();
 
-    // Get submission counts for each version
     const versionsWithCounts = await Promise.all(
       (versions.results ?? []).map(async (version) => {
         const countRow = await c.env.prod_pinchbench
@@ -32,8 +44,15 @@ export const registerBenchmarkVersionRoutes = (
           )
           .bind(version.id)
           .first<{ count: number }>();
+
+        const displayLabel = version.label || version.semver || version.id.slice(0, 8);
+
         return {
           id: version.id,
+          semver: version.semver,
+          label: displayLabel,
+          release_notes: version.release_notes,
+          release_url: version.release_url,
           created_at: version.created_at,
           is_current: version.current === 1,
           submission_count: countRow?.count ?? 0,
@@ -57,6 +76,10 @@ export const registerBenchmarkVersionRoutes = (
       .prepare(
         `SELECT 
           id, 
+          semver,
+          label,
+          release_notes,
+          release_url,
           created_at,
           current
         FROM benchmark_versions
@@ -64,7 +87,15 @@ export const registerBenchmarkVersionRoutes = (
         ORDER BY created_at DESC
         LIMIT 1`,
       )
-      .first<{ id: string; created_at: string; current: number }>();
+      .first<{
+        id: string;
+        semver: string | null;
+        label: string | null;
+        release_notes: string | null;
+        release_url: string | null;
+        created_at: string;
+        current: number;
+      }>();
 
     if (!currentVersion) {
       return c.json(
@@ -84,9 +115,15 @@ export const registerBenchmarkVersionRoutes = (
       .bind(currentVersion.id)
       .first<{ count: number }>();
 
+    const displayLabel = currentVersion.label || currentVersion.semver || currentVersion.id.slice(0, 8);
+
     return c.json({
       version: {
         id: currentVersion.id,
+        semver: currentVersion.semver,
+        label: displayLabel,
+        release_notes: currentVersion.release_notes,
+        release_url: currentVersion.release_url,
         created_at: currentVersion.created_at,
         is_current: true,
         submission_count: countRow?.count ?? 0,
