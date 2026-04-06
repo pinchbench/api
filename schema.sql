@@ -49,8 +49,14 @@ CREATE TABLE IF NOT EXISTS benchmark_versions (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   current INTEGER NOT NULL DEFAULT 0,
-  hidden INTEGER NOT NULL DEFAULT 0
+  hidden INTEGER NOT NULL DEFAULT 0,
+  semver TEXT,
+  label TEXT,
+  release_notes TEXT,
+  release_url TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_benchmark_versions_semver ON benchmark_versions(semver);
 
 CREATE INDEX IF NOT EXISTS idx_submissions_model ON submissions(model);
 CREATE INDEX IF NOT EXISTS idx_submissions_provider ON submissions(provider);
