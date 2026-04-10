@@ -23,21 +23,120 @@ type BenchmarkVersionResponse = {
   release_url: string | null;
 };
 
-function isValidSemver(version: string): boolean {
-  return /^\d+\.\d+\.\d+/.test(version);
+type ParsedSemver = {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: (string | number)[];
+  build: string | null;
+};
+
+/**
+ * Parse a SemVer string into comparable components.
+ * Handles: X.Y.Z, X.Y.Z-prerelease, X.Y.Z-prerelease+build, X.Y.Z+build
+ * Per semver.org spec.
+ */
+function parseSemver(version: string): ParsedSemver | null {
+  // Strip build metadata first (not used in comparison per spec)
+  const [versionWithoutBuild, build] = version.split("+");
+
+  // Match X.Y.Z or X.Y.Z-prerelease
+  const match = versionWithoutBuild.match(/^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/);
+  if (!match) return null;
+
+  const [, major, minor, patch, prereleaseStr] = match;
+
+  // Parse prerelease identifiers (dot-separated, can be numeric or alphanumeric)
+  const prerelease: (string | number)[] = prereleaseStr
+    ? prereleaseStr.split(".").map((id) => {
+        const num = parseInt(id, 10);
+        return !isNaN(num) && String(num) === id ? num : id;
+      })
+    : [];
+
+  return {
+    major: parseInt(major, 10),
+    minor: parseInt(minor, 10),
+    patch: parseInt(patch, 10),
+    prerelease,
+    build: build || null,
+  };
 }
 
+function isValidSemver(version: string): boolean {
+  return parseSemver(version) !== null;
+}
+
+/**
+ * Compare two SemVer strings per semver.org spec.
+ * Returns: negative if a > b (for descending sort), positive if a < b, 0 if equal
+ *
+ * Key rules from semver.org:
+ * - Pre-release versions have LOWER precedence than release (1.0.0-alpha < 1.0.0)
+ * - Numeric pre-release identifiers are compared numerically
+ * - Alphanumeric identifiers are compared lexically
+ * - Build metadata (+...) is ignored for precedence
+ */
 function compareSemver(a: string, b: string): number {
-  const parse = (v: string) => v.split(".").map(Number);
-  const [aParts, bParts] = [parse(a), parse(b)];
-  const maxLen = Math.max(aParts.length, bParts.length);
+  const aParsed = parseSemver(a);
+  const bParsed = parseSemver(b);
+
+  // Invalid versions sort to the end
+  if (!aParsed && !bParsed) return 0;
+  if (!aParsed) return 1;
+  if (!bParsed) return -1;
+
+  // Compare major.minor.patch (descending order)
+  if (aParsed.major !== bParsed.major)
+    return bParsed.major - aParsed.major;
+  if (aParsed.minor !== bParsed.minor)
+    return bParsed.minor - aParsed.minor;
+  if (aParsed.patch !== bParsed.patch)
+    return bParsed.patch - aParsed.patch;
+
+  // Pre-release versions have LOWER precedence than release
+  // e.g., 1.0.0-alpha < 1.0.0
+  const aHasPre = aParsed.prerelease.length > 0;
+  const bHasPre = bParsed.prerelease.length > 0;
+
+  if (!aHasPre && bHasPre) return -1; // a is release, b is pre-release, a > b
+  if (aHasPre && !bHasPre) return 1; // a is pre-release, b is release, a < b
+  if (!aHasPre && !bHasPre) return 0; // both releases, equal
+
+  // Compare pre-release identifiers
+  const maxLen = Math.max(
+    aParsed.prerelease.length,
+    bParsed.prerelease.length,
+  );
   for (let i = 0; i < maxLen; i++) {
-    const aNum = aParts[i] ?? 0;
-    const bNum = bParts[i] ?? 0;
-    if (aNum !== bNum) return bNum - aNum;
+    const aId = aParsed.prerelease[i];
+    const bId = bParsed.prerelease[i];
+
+    // Fewer identifiers = lower precedence (1.0.0-alpha < 1.0.0-alpha.1)
+    if (aId === undefined) return 1; // a has fewer, a < b
+    if (bId === undefined) return -1; // b has fewer, b < a
+
+    // Numeric identifiers always have lower precedence than alphanumeric
+    const aIsNum = typeof aId === "number";
+    const bIsNum = typeof bId === "number";
+
+    if (aIsNum && !bIsNum) return 1; // numeric < alphanumeric
+    if (!aIsNum && bIsNum) return -1;
+
+    if (aIsNum && bIsNum) {
+      if (aId !== bId) return (bId as number) - (aId as number);
+    } else {
+      // Both alphanumeric - lexicographic comparison
+      if (aId < bId) return 1;
+      if (aId > bId) return -1;
+    }
   }
+
   return 0;
 }
+
+// Export for testing
+export { parseSemver, isValidSemver, compareSemver };
 
 function getLabel(version: BenchmarkVersionRow): string {
   return version.label ?? version.semver ?? version.id.slice(0, 8);
