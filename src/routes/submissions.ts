@@ -6,6 +6,113 @@ import {
   appendBenchmarkVersionFilter,
 } from "../utils/query";
 import { getModelMetadata } from "../utils/modelMetadata";
+import { registerRoute } from "../utils/routeRegistry";
+
+registerRoute({
+  method: "GET",
+  path: "/api/submissions",
+  summary: "List submissions with filters",
+  description:
+    "Returns a paginated list of benchmark submissions. Supports filtering by model, provider, verification status, and benchmark version.",
+  tags: ["Submissions"],
+  auth: "none",
+  cacheTTL: 30,
+  params: [
+    { name: "model", in: "query", type: "string", description: "Filter by model name" },
+    { name: "provider", in: "query", type: "string", description: "Filter by provider" },
+    { name: "verified", in: "query", type: "string", description: "Set to 'true' for claimed tokens only", enum: ["true", "false"] },
+    { name: "official", in: "query", type: "string", description: "Set to 'true' for official runs only", enum: ["true", "false"] },
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version ID (or 'latest')" },
+    { name: "sort", in: "query", type: "string", description: "Sort order", default: "score", enum: ["score", "recent", "oldest"] },
+    { name: "limit", in: "query", type: "integer", description: "Max results (1-100)", default: 20 },
+    { name: "offset", in: "query", type: "integer", description: "Pagination offset", default: 0 },
+  ],
+  responses: {
+    200: {
+      description: "Paginated list of submissions",
+      schema: {
+        type: "object",
+        properties: {
+          submissions: { type: "array", items: { type: "object" } },
+          total: { type: "integer" },
+          limit: { type: "integer" },
+          offset: { type: "integer" },
+          has_more: { type: "boolean" },
+        },
+      },
+    },
+  },
+  relatedEndpoints: ["/api/submissions/:id", "/api/leaderboard"],
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/submissions/:id",
+  summary: "Get submission details",
+  description:
+    "Returns full details for a single submission including task breakdown, usage summary, metadata, rank, and percentile.",
+  tags: ["Submissions"],
+  auth: "none",
+  params: [
+    { name: "id", in: "path", type: "string", required: true, description: "Submission UUID" },
+  ],
+  responses: {
+    200: {
+      description: "Full submission details",
+      schema: {
+        type: "object",
+        properties: {
+          submission: { type: "object" },
+          rank: { type: "integer" },
+          total_submissions: { type: "integer" },
+          percentile: { type: "number" },
+        },
+      },
+    },
+    404: { description: "Submission not found" },
+  },
+  relatedEndpoints: ["/api/submissions", "/api/leaderboard"],
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/model-submissions",
+  summary: "Get all submissions for a specific model",
+  description:
+    "Returns a lightweight list of all submissions for a given model ordered by score. Includes an is_best flag marking the leaderboard entry.",
+  tags: ["Submissions"],
+  auth: "none",
+  params: [
+    { name: "model", in: "query", type: "string", required: true, description: "Model name (e.g. google/gemini-2.5-pro)" },
+    { name: "verified", in: "query", type: "string", description: "Set to 'true' for claimed tokens only", enum: ["true", "false"] },
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version" },
+  ],
+  responses: {
+    200: { description: "List of submissions for the model" },
+    400: { description: "Model name is required" },
+  },
+  relatedEndpoints: ["/api/submissions/:id", "/api/models"],
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/me/submissions",
+  summary: "Get your submissions",
+  description:
+    "Returns submissions for the authenticated user's token. Requires X-PinchBench-Token header.",
+  tags: ["Submissions"],
+  auth: "token",
+  params: [
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version" },
+    { name: "limit", in: "query", type: "integer", description: "Max results (1-100)", default: 20 },
+    { name: "offset", in: "query", type: "integer", description: "Pagination offset", default: 0 },
+  ],
+  responses: {
+    200: { description: "Paginated list of your submissions" },
+    401: { description: "Authentication token required or invalid" },
+  },
+  relatedEndpoints: ["/api/submissions", "/api/claim/github"],
+});
 
 export const registerSubmissionRoutes = (
   app: Hono<{ Bindings: Bindings }>,

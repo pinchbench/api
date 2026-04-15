@@ -1,9 +1,42 @@
 import type { Hono } from "hono";
 import type { Bindings } from "../types";
 import { ensureHttps, hashToken, randomHex } from "../utils/security";
+import { registerRoute } from "../utils/routeRegistry";
 
 const MAX_REGISTRATIONS_PER_HOUR = 10;
 const CLAIM_TTL_HOURS = 24;
+
+registerRoute({
+  method: "POST",
+  path: "/api/register",
+  summary: "Register a new API token",
+  description:
+    "Creates a new API token and returns it along with a claim URL for GitHub verification. The token is prefixed with pb_live_ and should be stored securely.",
+  tags: ["Authentication"],
+  auth: "none",
+  rateLimit: `${MAX_REGISTRATIONS_PER_HOUR} requests per hour per IP`,
+  requestBody: {
+    description: "Empty JSON body (Content-Type: application/json required)",
+    schema: { type: "object" },
+  },
+  responses: {
+    201: {
+      description: "Token created successfully",
+      schema: {
+        type: "object",
+        properties: {
+          token: { type: "string", description: "API token (pb_live_...)" },
+          api_key: { type: "string", description: "Same as token (alias)" },
+          claim_url: {
+            type: "string",
+            description: "URL to claim this token via GitHub OAuth",
+          },
+        },
+      },
+    },
+    429: { description: "Rate limited — too many registrations from this IP" },
+  },
+});
 
 const getClientIp = (c: {
   req: { header: (name: string) => string | undefined };

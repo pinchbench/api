@@ -2,9 +2,74 @@ import type { Hono } from "hono";
 import type { Bindings, SubmissionPayload } from "../types";
 import { ensureHttps, getAuthToken, hashToken } from "../utils/security";
 import { normalizeModelName } from "../utils/models";
+import { registerRoute } from "../utils/routeRegistry";
 
 // Matches semver-like strings: X.Y.Z or X.Y (with optional pre-release/build)
 const SEMVER_REGEX = /^\d+\.\d+(\.\d+)?(-[\w.]+)?(\+[\w.]+)?$/;
+
+registerRoute({
+  method: "POST",
+  path: "/api/results",
+  summary: "Submit benchmark results",
+  description:
+    "Submit benchmark results for an AI model run. Requires authentication. If a submission with the same ID already exists, returns the existing ranking without creating a duplicate.",
+  tags: ["Submissions"],
+  auth: "token",
+  rateLimit: "100 submissions per day per token",
+  requestBody: {
+    description: "Benchmark result payload",
+    schema: {
+      type: "object",
+      required: ["submission_id", "timestamp", "model", "total_score", "max_score", "tasks"],
+      properties: {
+        submission_id: { type: "string", format: "uuid", description: "UUID v4 identifying this submission" },
+        timestamp: { type: "string", format: "date-time", description: "ISO 8601 timestamp" },
+        model: { type: "string", description: "Model identifier (e.g. google/gemini-2.5-pro)" },
+        provider: { type: "string", description: "Provider name (e.g. openrouter)" },
+        benchmark_version: { type: "string", description: "Benchmark version identifier" },
+        total_score: { type: "number", description: "Total points scored" },
+        max_score: { type: "number", description: "Maximum possible score" },
+        total_execution_time_seconds: { type: "number" },
+        total_cost_usd: { type: "number" },
+        input_tokens: { type: "integer" },
+        output_tokens: { type: "integer" },
+        total_tokens: { type: "integer" },
+        tasks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              task_id: { type: "string" },
+              score: { type: "number" },
+              max_score: { type: "number" },
+            },
+          },
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: "Submission accepted (new)",
+      schema: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["accepted"] },
+          submission_id: { type: "string" },
+          official: { type: "boolean" },
+          rank: { type: "integer" },
+          percentile: { type: "number" },
+          leaderboard_url: { type: "string" },
+        },
+      },
+    },
+    200: { description: "Submission already existed, returning existing ranking" },
+    401: { description: "Invalid or missing authentication token" },
+    422: { description: "Validation failed" },
+    429: { description: "Rate limited" },
+  },
+  relatedEndpoints: ["/api/submissions/:id", "/api/leaderboard"],
+});
 
 const UUID_V4_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

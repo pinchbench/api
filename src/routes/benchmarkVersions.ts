@@ -1,5 +1,44 @@
 import type { Hono } from "hono";
 import type { Bindings } from "../types";
+import { registerRoute } from "../utils/routeRegistry";
+
+registerRoute({
+  method: "GET",
+  path: "/api/benchmark_versions",
+  summary: "List all benchmark versions",
+  description:
+    "Returns all non-hidden benchmark versions sorted by semver (descending). Includes submission counts, release notes, and whether each version is current.",
+  tags: ["Benchmark Versions"],
+  auth: "none",
+  responses: {
+    200: {
+      description: "List of benchmark versions",
+      schema: {
+        type: "object",
+        properties: {
+          versions: { type: "array", items: { type: "object" } },
+          generated_at: { type: "string", format: "date-time" },
+        },
+      },
+    },
+  },
+  relatedEndpoints: ["/api/benchmark_versions/latest", "/api/leaderboard"],
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/benchmark_versions/latest",
+  summary: "Get the current benchmark version",
+  description:
+    "Returns the benchmark version marked as current, with its submission count and release details.",
+  tags: ["Benchmark Versions"],
+  auth: "none",
+  responses: {
+    200: { description: "Current benchmark version" },
+    404: { description: "No current benchmark version found" },
+  },
+  relatedEndpoints: ["/api/benchmark_versions", "/api/leaderboard"],
+});
 
 type BenchmarkVersionRow = {
   id: string;

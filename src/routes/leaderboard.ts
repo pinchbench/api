@@ -5,6 +5,101 @@ import {
   appendBenchmarkVersionFilter,
 } from "../utils/query";
 import { getModelMetadata } from "../utils/modelMetadata";
+import { registerRoute } from "../utils/routeRegistry";
+
+registerRoute({
+  method: "GET",
+  path: "/api/leaderboard",
+  summary: "Get aggregated leaderboard",
+  description:
+    "Returns the best scores grouped by model. Each entry includes best and average scores, execution times, costs, and submission counts.",
+  tags: ["Leaderboard"],
+  auth: "none",
+  cacheTTL: 60,
+  params: [
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version ID (or 'latest')" },
+    { name: "verified", in: "query", type: "string", description: "Set to 'true' to only include submissions from claimed tokens", enum: ["true", "false"] },
+    { name: "official", in: "query", type: "string", description: "Set to 'true' to only include official submissions", enum: ["true", "false"] },
+    { name: "provider", in: "query", type: "string", description: "Filter by provider name" },
+    { name: "limit", in: "query", type: "integer", description: "Max results to return", default: 50, example: 50 },
+  ],
+  responses: {
+    200: {
+      description: "Leaderboard data",
+      schema: {
+        type: "object",
+        properties: {
+          leaderboard: { type: "array", items: { type: "object" } },
+          total_models: { type: "integer" },
+          verified_only: { type: "boolean" },
+          official_only: { type: "boolean" },
+          benchmark_versions: { type: "array", items: { type: "string" } },
+          generated_at: { type: "string", format: "date-time" },
+        },
+      },
+    },
+  },
+  relatedEndpoints: ["/api/models", "/api/stats", "/api/submissions"],
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/models",
+  summary: "List all models",
+  description:
+    "Returns all models with submission counts, best scores, and latest submission dates. Useful for building filter dropdowns or exploring available models.",
+  tags: ["Leaderboard"],
+  auth: "none",
+  cacheTTL: 60,
+  params: [
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version ID (or 'latest')" },
+    { name: "verified", in: "query", type: "string", description: "Set to 'true' for claimed tokens only", enum: ["true", "false"] },
+  ],
+  responses: {
+    200: {
+      description: "List of models",
+      schema: {
+        type: "object",
+        properties: {
+          models: { type: "array", items: { type: "object" } },
+          benchmark_versions: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+  },
+  relatedEndpoints: ["/api/leaderboard", "/api/providers"],
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/stats",
+  summary: "Get aggregate statistics",
+  description:
+    "Returns high-level statistics: total submissions, total models, verified submissions, recent activity, and the current top model.",
+  tags: ["Leaderboard"],
+  auth: "none",
+  cacheTTL: 60,
+  params: [
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version ID (or 'latest')" },
+  ],
+  responses: {
+    200: {
+      description: "Aggregate statistics",
+      schema: {
+        type: "object",
+        properties: {
+          total_submissions: { type: "integer" },
+          total_models: { type: "integer" },
+          verified_submissions: { type: "integer" },
+          submissions_last_24h: { type: "integer" },
+          top_model: { type: "object", nullable: true },
+          generated_at: { type: "string", format: "date-time" },
+        },
+      },
+    },
+  },
+  relatedEndpoints: ["/api/leaderboard"],
+});
 
 export const registerLeaderboardRoutes = (
   app: Hono<{ Bindings: Bindings }>,

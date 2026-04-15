@@ -5,6 +5,52 @@ import {
   appendBenchmarkVersionFilter,
 } from "../utils/query";
 import { getModelMetadata } from "../utils/modelMetadata";
+import { registerRoute } from "../utils/routeRegistry";
+
+registerRoute({
+  method: "GET",
+  path: "/api/providers",
+  summary: "List all providers",
+  description: "Returns a list of all unique provider names from submissions.",
+  tags: ["Providers"],
+  auth: "none",
+  params: [
+    { name: "verified", in: "query", type: "string", description: "Set to 'true' for claimed tokens only", enum: ["true", "false"] },
+  ],
+  responses: {
+    200: {
+      description: "List of providers",
+      schema: {
+        type: "object",
+        properties: {
+          providers: { type: "array", items: { type: "string" } },
+          count: { type: "integer" },
+        },
+      },
+    },
+  },
+  relatedEndpoints: ["/api/providers/:provider/models", "/api/models"],
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/providers/:provider/models",
+  summary: "List models for a provider with stats",
+  description:
+    "Returns models available from a specific provider along with submission counts, best/average scores, costs, and execution times.",
+  tags: ["Providers"],
+  auth: "none",
+  params: [
+    { name: "provider", in: "path", type: "string", required: true, description: "Provider name" },
+    { name: "verified", in: "query", type: "string", description: "Set to 'true' for claimed tokens only", enum: ["true", "false"] },
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version" },
+  ],
+  responses: {
+    200: { description: "Models for the provider with stats" },
+    422: { description: "Provider is required" },
+  },
+  relatedEndpoints: ["/api/providers", "/api/leaderboard"],
+});
 
 export const registerProvidersRoutes = (app: Hono<{ Bindings: Bindings }>) => {
   /**

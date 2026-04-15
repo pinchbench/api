@@ -10,6 +10,13 @@ import { registerProvidersRoutes } from "./routes/providers";
 import { registerClaimRoutes } from "./routes/claim";
 import { registerUserRoutes } from "./routes/users";
 import { admin } from "./routes/admin";
+import {
+  getRoutes,
+  getRoutesForPath,
+  getRouteByMethodAndPath,
+  generateOpenAPISpec,
+  generateMarkdownDocs,
+} from "./utils/routeRegistry";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
@@ -96,31 +103,136 @@ app.use(
   }),
 );
 
+// --- Dynamic root endpoint with content negotiation ---
 app.get("/", (c) => {
+  const accept = c.req.header("Accept") ?? "application/json";
+  const baseUrl = new URL(c.req.url).origin;
+
+  // Content negotiation: markdown for text clients, JSON for agents/default
+  if (
+    accept.includes("text/markdown") ||
+    accept.includes("text/plain")
+  ) {
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    return c.body(generateMarkdownDocs());
+  }
+
+  // Default: JSON response built dynamically from route registry
+  const routes = getRoutes();
+  const endpoints = routes.map((r) => ({
+    method: r.method,
+    path: r.path,
+    summary: r.summary,
+    description: r.description ?? null,
+    tags: r.tags ?? [],
+    auth: r.auth ?? "none",
+    params: (r.params ?? []).map((p) => ({
+      name: p.name,
+      in: p.in,
+      type: p.type,
+      required: p.required ?? (p.in === "path"),
+      description: p.description,
+      ...(p.default !== undefined ? { default: p.default } : {}),
+      ...(p.enum ? { enum: p.enum } : {}),
+    })),
+  }));
+
+  c.header("Link", `<${baseUrl}/openapi.json>; rel="service-desc"; type="application/openapi+json"`);
+
   return c.json({
     name: "PinchBench API",
     version: "1.0.0",
-    endpoints: {
-      "POST /api/register": "Register a new API token",
-      "POST /api/results": "Submit benchmark results",
-      "GET /api/leaderboard":
-        "Get aggregated leaderboard (supports ?version param)",
-      "GET /api/submissions": "List submissions with filters",
-      "GET /api/submissions/:id": "Get submission details",
-      "GET /api/models": "List all models",
-      "GET /api/providers": "List all providers",
-      "GET /api/providers/:provider/models":
-        "List models for a provider with stats",
-      "GET /api/me/submissions": "Get your submissions (requires auth)",
-      "GET /api/stats": "Get aggregate statistics",
-      "GET /api/benchmark_versions": "List all benchmark versions",
-      "GET /api/benchmark_versions/latest": "Get the current benchmark version",
-      "GET /api/claim/github": "Initiate GitHub OAuth claim flow",
-      "GET /api/claim/github/callback": "GitHub OAuth callback (browser redirect)",
-      "POST /api/claim/refresh": "Refresh an expired claim code (requires auth)",
-      "GET /api/users/:github_username/submissions": "Public submissions for a GitHub user",
+    description:
+      "Benchmarking leaderboard API for AI/LLM models. Submit benchmark results, view leaderboards, and compare model performance across providers.",
+    openapi_spec: `${baseUrl}/openapi.json`,
+    documentation: "https://pinchbench.com",
+    endpoints,
+    _meta: {
+      total_endpoints: endpoints.length,
+      generated_at: new Date().toISOString(),
+      content_types: ["application/json", "text/markdown"],
     },
   });
+});
+
+// --- OpenAPI 3.1 spec endpoint ---
+app.get("/openapi.json", (c) => {
+  const baseUrl = new URL(c.req.url).origin;
+  c.header("Cache-Control", "public, max-age=300, s-maxage=300");
+  c.header("Access-Control-Allow-Origin", "*");
+  return c.json(generateOpenAPISpec(baseUrl));
+});
+
+// --- OPTIONS handler for per-route metadata discovery ---
+app.on("OPTIONS", "/api/*", (c) => {
+  const path = new URL(c.req.url).pathname;
+  const matchedRoutes = getRoutesForPath(path);
+
+  if (matchedRoutes.length === 0) {
+    // Fall through to CORS preflight handling
+    c.header("Allow", "OPTIONS");
+    return c.body(null, 204);
+  }
+
+  const methods = matchedRoutes.map((r) => r.method);
+  methods.push("OPTIONS");
+  c.header("Allow", [...new Set(methods)].join(", "));
+  c.header("Access-Control-Allow-Origin", "*");
+  c.header(
+    "Access-Control-Allow-Methods",
+    [...new Set(methods)].join(", "),
+  );
+  c.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, X-PinchBench-Token, X-PinchBench-Version",
+  );
+
+  return c.json({
+    path,
+    methods: matchedRoutes.map((r) => ({
+      method: r.method,
+      summary: r.summary,
+      description: r.description ?? null,
+      auth: r.auth ?? "none",
+      rateLimit: r.rateLimit ?? null,
+      params: r.params ?? [],
+      requestBody: r.requestBody ?? null,
+      responses: r.responses ?? {},
+      relatedEndpoints: r.relatedEndpoints ?? [],
+    })),
+    _meta: {
+      hint: "Use GET /openapi.json for the full OpenAPI 3.1 specification.",
+    },
+  });
+});
+
+// --- Link header & _meta enrichment middleware ---
+// Adds Link headers pointing to the OpenAPI spec and related endpoints
+// for all JSON API responses.
+app.use("/api/*", async (c, next) => {
+  await next();
+
+  // Only enrich JSON responses
+  const contentType = c.res.headers.get("Content-Type") ?? "";
+  if (!contentType.includes("application/json")) return;
+
+  const baseUrl = new URL(c.req.url).origin;
+  const path = new URL(c.req.url).pathname;
+
+  // Add Link header to OpenAPI spec
+  const links: string[] = [
+    `<${baseUrl}/openapi.json>; rel="service-desc"; type="application/openapi+json"`,
+  ];
+
+  // Find the route metadata for related endpoint links
+  const routeMeta = getRouteByMethodAndPath(c.req.method, path);
+  if (routeMeta?.relatedEndpoints) {
+    for (const related of routeMeta.relatedEndpoints) {
+      links.push(`<${baseUrl}${related}>; rel="related"`);
+    }
+  }
+
+  c.res.headers.set("Link", links.join(", "));
 });
 
 registerResultsRoutes(app);

@@ -1,6 +1,63 @@
 import type { Hono } from "hono";
 import type { Bindings } from "../types";
 import { getAuthToken, hashToken, randomHex } from "../utils/security";
+import { registerRoute } from "../utils/routeRegistry";
+
+registerRoute({
+  method: "GET",
+  path: "/api/claim/github",
+  summary: "Initiate GitHub OAuth claim flow",
+  description:
+    "Validates a claim code and redirects the user to GitHub OAuth for token verification. The claim code is used as the OAuth state parameter.",
+  tags: ["Authentication"],
+  auth: "none",
+  params: [
+    { name: "claim_code", in: "query", type: "string", required: true, description: "Claim code from token registration" },
+  ],
+  responses: {
+    302: { description: "Redirect to GitHub OAuth" },
+  },
+});
+
+registerRoute({
+  method: "GET",
+  path: "/api/claim/github/callback",
+  summary: "GitHub OAuth callback",
+  description:
+    "GitHub redirects here after user authorization. Exchanges the code for a token, fetches the GitHub user, and marks the API token as claimed. This is a browser redirect endpoint, not intended for direct API consumption.",
+  tags: ["Authentication"],
+  auth: "none",
+  params: [
+    { name: "code", in: "query", type: "string", required: true, description: "GitHub OAuth authorization code" },
+    { name: "state", in: "query", type: "string", required: true, description: "Claim code (CSRF state)" },
+  ],
+  responses: {
+    302: { description: "Redirect to pinchbench.com success or error page" },
+  },
+});
+
+registerRoute({
+  method: "POST",
+  path: "/api/claim/refresh",
+  summary: "Refresh an expired claim code",
+  description:
+    "Generates a new claim code and URL for a token that hasn't been claimed yet. Requires authentication with the token to be refreshed.",
+  tags: ["Authentication"],
+  auth: "token",
+  responses: {
+    200: {
+      description: "New claim URL",
+      schema: {
+        type: "object",
+        properties: {
+          claim_url: { type: "string", description: "New claim URL" },
+        },
+      },
+    },
+    400: { description: "Token already claimed" },
+    401: { description: "Authentication required" },
+  },
+});
 
 const CLAIM_TTL_HOURS = 24;
 

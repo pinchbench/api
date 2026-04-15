@@ -4,6 +4,30 @@ import {
   resolveBenchmarkVersions,
   appendBenchmarkVersionFilter,
 } from "../utils/query";
+import { registerRoute } from "../utils/routeRegistry";
+
+registerRoute({
+  method: "GET",
+  path: "/api/users/:github_username/submissions",
+  summary: "Public submissions for a GitHub user",
+  description:
+    "Returns all submissions from tokens claimed by the given GitHub user. No authentication required — this is a public profile view.",
+  tags: ["Users"],
+  auth: "none",
+  params: [
+    { name: "github_username", in: "path", type: "string", required: true, description: "GitHub username (case-insensitive)" },
+    { name: "version", in: "query", type: "string", description: "Filter by benchmark version" },
+    { name: "sort", in: "query", type: "string", description: "Sort order", default: "score", enum: ["score", "recent", "oldest"] },
+    { name: "limit", in: "query", type: "integer", description: "Max results (1-100)", default: 20 },
+    { name: "offset", in: "query", type: "integer", description: "Pagination offset", default: 0 },
+  ],
+  responses: {
+    200: { description: "Paginated submissions with summary stats" },
+    400: { description: "GitHub username required" },
+    404: { description: "User not found" },
+  },
+  relatedEndpoints: ["/api/submissions", "/api/leaderboard"],
+});
 
 export const registerUserRoutes = (app: Hono<{ Bindings: Bindings }>) => {
   /**
