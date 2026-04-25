@@ -70,6 +70,9 @@ export type SubmissionRow = {
   max_score: number;
   total_execution_time_seconds: number | null;
   total_cost_usd: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
   timestamp: string;
   created_at: string;
   client_version: string | null;
@@ -80,12 +83,17 @@ export type SubmissionRow = {
   usage_summary: string | null;
   metadata: string | null;
   official: number;
+  is_flagged: number;
+  flag_reason: string | null;
   claimed: number;
   github_username: string | null;
 };
 
 export type BenchmarkVersion = {
   id: string;
+  created_at: string;
+  current: number;
+  hidden: number;
   semver: string | null;
   label: string;
   release_notes: string | null;

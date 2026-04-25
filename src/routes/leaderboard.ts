@@ -121,6 +121,8 @@ export const registerLeaderboardRoutes = (
     const verifiedFlag = verified ? 1 : 0;
     const official = c.req.query("official") === "true";
     const officialFlag = official ? 1 : 0;
+    const includeFlagged = c.req.query("include_flagged") === "true";
+    const flaggedFlag = includeFlagged ? 1 : 0;
     const providerFilter = c.req.query("provider")?.trim();
     const benchmarkVersions = await resolveBenchmarkVersions(c);
     const limitParam = parseInt(c.req.query("limit") ?? "50", 10);
@@ -145,6 +147,7 @@ export const registerLeaderboardRoutes = (
           WHERE s2.model = s.model 
             AND (? = 0 OR t2.claimed_at IS NOT NULL)
             AND (? = 0 OR s2.official = 1)
+            AND (? = 1 OR s2.is_flagged = 0)
           ORDER BY s2.score_percentage DESC, s2.timestamp DESC, s2.id ASC
           LIMIT 1
         ) as best_submission_id
@@ -152,9 +155,14 @@ export const registerLeaderboardRoutes = (
       JOIN tokens t ON s.token_id = t.id
       WHERE (? = 0 OR t.claimed_at IS NOT NULL)
         AND (? = 0 OR s.official = 1)
+        AND (? = 1 OR s.is_flagged = 0)
     `;
 
-    const bindings: (string | number)[] = [verifiedFlag, officialFlag];
+    const bindings: (string | number)[] = [
+      verifiedFlag,
+      officialFlag,
+      flaggedFlag,
+    ];
 
     if (benchmarkVersions.length > 0) {
       query = query.replace(
@@ -183,6 +191,7 @@ export const registerLeaderboardRoutes = (
     bindings.push(
       verifiedFlag,
       officialFlag,
+      flaggedFlag,
       ...benchmarkVersions,
       ...(providerFilter ? [providerFilter] : []),
       limit,
@@ -195,11 +204,11 @@ export const registerLeaderboardRoutes = (
 
     const needsJoin = verified || official;
     let totalModelsQuery = needsJoin
-      ? `SELECT COUNT(DISTINCT s.model) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE (? = 0 OR t.claimed_at IS NOT NULL) AND (? = 0 OR s.official = 1)`
-      : "SELECT COUNT(DISTINCT model) as count FROM submissions";
+      ? `SELECT COUNT(DISTINCT s.model) as count FROM submissions s JOIN tokens t ON s.token_id = t.id WHERE (? = 0 OR t.claimed_at IS NOT NULL) AND (? = 0 OR s.official = 1) AND (? = 1 OR s.is_flagged = 0)`
+      : `SELECT COUNT(DISTINCT model) as count FROM submissions s WHERE (? = 1 OR s.is_flagged = 0)`;
     const totalModelsBindings: (string | number)[] = needsJoin
-      ? [verifiedFlag, officialFlag]
-      : [];
+      ? [verifiedFlag, officialFlag, flaggedFlag]
+      : [flaggedFlag];
     if (benchmarkVersions.length > 0) {
       totalModelsQuery += needsJoin
         ? appendBenchmarkVersionFilter(
