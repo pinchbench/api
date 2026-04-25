@@ -22,6 +22,16 @@ describe("parseSemver", () => {
     });
   });
 
+  test("parses beta prerelease identifiers numerically", () => {
+    expect(parseSemver("1.0.0-beta.10")).toEqual({
+      major: 1,
+      minor: 0,
+      patch: 0,
+      prerelease: ["beta", 10],
+      build: null,
+    });
+  });
+
   test("parses version with alphanumeric prerelease", () => {
     expect(parseSemver("1.0.0-alpha.beta.1")).toEqual({
       major: 1,
@@ -228,6 +238,24 @@ describe("compareSemver", () => {
         "1.2.2-dev.13+gabc1234",
         "1.2.2-dev.1+g1111111",
         "1.2.1",
+      ]);
+    });
+
+    test("sorting legacy beta versions correctly", () => {
+      const versions = [
+        "1.0.0-beta.1",
+        "0.9.0",
+        "1.0.0-beta.10",
+        "1.0.0",
+        "1.0.0-beta.2",
+      ];
+
+      expect([...versions].sort(compareSemver)).toEqual([
+        "1.0.0",
+        "1.0.0-beta.10",
+        "1.0.0-beta.2",
+        "1.0.0-beta.1",
+        "0.9.0",
       ]);
     });
   });

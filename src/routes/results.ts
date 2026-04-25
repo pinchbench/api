@@ -4,8 +4,50 @@ import { ensureHttps, getAuthToken, hashToken } from "../utils/security";
 import { normalizeModelName } from "../utils/models";
 import { registerRoute } from "../utils/routeRegistry";
 
-// Matches semver-like strings: X.Y.Z or X.Y (with optional pre-release/build)
-const SEMVER_REGEX = /^\d+\.\d+(\.\d+)?(-[\w.]+)?(\+[\w.]+)?$/;
+// Benchmark version IDs are semver-ish only when they have major.minor.patch.
+// Two-component values such as "1.0" are legacy labels for sorting purposes.
+const STRICT_SEMVER_REGEX =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const LEGACY_BETA_LABEL_REGEX = /^1\.0\.0-beta\.(\d+)$/;
+
+export const isStrictBenchmarkSemver = (version: string): boolean =>
+  STRICT_SEMVER_REGEX.test(version);
+
+export const getNextLegacyBenchmarkVersionLabel = async (
+  db: Bindings["prod_pinchbench"],
+): Promise<string> => {
+  const legacyLabels = await db
+    .prepare(
+      `SELECT semver, label
+       FROM benchmark_versions
+       WHERE semver LIKE '1.0.0-beta.%'
+          OR label LIKE '1.0.0-beta.%'`,
+    )
+    .all<{ semver: string | null; label: string | null }>();
+
+  const maxLegacyIndex = (legacyLabels.results ?? []).reduce((max, row) => {
+    const semverMatch = row.semver?.match(LEGACY_BETA_LABEL_REGEX);
+    const labelMatch = row.label?.match(LEGACY_BETA_LABEL_REGEX);
+    const semverIndex = semverMatch ? Number(semverMatch[1]) : 0;
+    const labelIndex = labelMatch ? Number(labelMatch[1]) : 0;
+
+    return Math.max(max, semverIndex, labelIndex);
+  }, 0);
+
+  return `1.0.0-beta.${maxLegacyIndex + 1}`;
+};
+
+const getBenchmarkVersionInsertLabels = async (
+  db: Bindings["prod_pinchbench"],
+  benchmarkVersion: string,
+): Promise<{ semver: string; label: string }> => {
+  if (isStrictBenchmarkSemver(benchmarkVersion)) {
+    return { semver: benchmarkVersion, label: benchmarkVersion };
+  }
+
+  const legacyLabel = await getNextLegacyBenchmarkVersionLabel(db);
+  return { semver: legacyLabel, label: legacyLabel };
+};
 
 registerRoute({
   method: "POST",
@@ -327,18 +369,24 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
         .run();
 
       if (payload.benchmark_version) {
-        // If the version looks like a semver, use it for both semver and label
-        // Otherwise, default to "0.0.1" for git hash-style versions
-        const isSemver = SEMVER_REGEX.test(payload.benchmark_version);
-        const semverValue = isSemver ? payload.benchmark_version : "0.0.1";
-        const labelValue = isSemver ? payload.benchmark_version : "0.0.1";
+        const existingBenchmarkVersion = await c.env.prod_pinchbench
+          .prepare("SELECT id FROM benchmark_versions WHERE id = ? LIMIT 1")
+          .bind(payload.benchmark_version)
+          .first<{ id: string }>();
 
-        await c.env.prod_pinchbench
-          .prepare(
-            "INSERT OR IGNORE INTO benchmark_versions (id, current, semver, label) VALUES (?, 0, ?, ?)",
-          )
-          .bind(payload.benchmark_version, semverValue, labelValue)
-          .run();
+        if (!existingBenchmarkVersion) {
+          const { semver, label } = await getBenchmarkVersionInsertLabels(
+            c.env.prod_pinchbench,
+            payload.benchmark_version,
+          );
+
+          await c.env.prod_pinchbench
+            .prepare(
+              "INSERT OR IGNORE INTO benchmark_versions (id, current, semver, label) VALUES (?, 0, ?, ?)",
+            )
+            .bind(payload.benchmark_version, semver, label)
+            .run();
+        }
       }
     }
 
