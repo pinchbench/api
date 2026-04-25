@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS submissions (
   usage_summary TEXT,
   metadata TEXT,
   official INTEGER NOT NULL DEFAULT 0,
+  is_flagged INTEGER NOT NULL DEFAULT 0,
+  flag_reason TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (token_id) REFERENCES tokens(id)
 );
@@ -65,6 +67,20 @@ CREATE INDEX IF NOT EXISTS idx_tokens_github_username ON tokens(github_username)
 CREATE INDEX IF NOT EXISTS idx_token_registration_limits_ip ON token_registration_limits(ip);
 CREATE INDEX IF NOT EXISTS idx_token_registration_limits_created_at ON token_registration_limits(created_at);
 CREATE INDEX IF NOT EXISTS idx_benchmark_versions_semver ON benchmark_versions(semver);
+
+CREATE TABLE IF NOT EXISTS submission_rate_limits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token_id TEXT NOT NULL,
+  ip TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (token_id) REFERENCES tokens(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_submission_rate_limits_token_id ON submission_rate_limits(token_id);
+CREATE INDEX IF NOT EXISTS idx_submission_rate_limits_ip ON submission_rate_limits(ip);
+CREATE INDEX IF NOT EXISTS idx_submission_rate_limits_created_at ON submission_rate_limits(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_submissions_is_flagged ON submissions(is_flagged);
 
 -- Raw POST request logging for debugging
 CREATE TABLE IF NOT EXISTS raw_post_logs (

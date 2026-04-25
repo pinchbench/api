@@ -137,6 +137,7 @@ export const registerSubmissionRoutes = (
     const provider = c.req.query("provider")?.trim();
     const verified = c.req.query("verified") === "true";
     const official = c.req.query("official") === "true";
+    const includeFlagged = c.req.query("include_flagged") === "true";
     const benchmarkVersions = await resolveBenchmarkVersions(c);
     const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
     const limit = Math.min(Math.max(1, limitParam), 100);
@@ -159,6 +160,8 @@ export const registerSubmissionRoutes = (
         s.openclaw_version,
         s.benchmark_version,
         s.official,
+        s.is_flagged,
+        s.flag_reason,
         CASE WHEN t.claimed_at IS NOT NULL THEN 1 ELSE 0 END as claimed
       FROM submissions s
       JOIN tokens t ON s.token_id = t.id
@@ -183,6 +186,10 @@ export const registerSubmissionRoutes = (
 
     if (official) {
       query += " AND s.official = 1";
+    }
+
+    if (!includeFlagged) {
+      query += " AND s.is_flagged = 0";
     }
 
     if (benchmarkVersions.length > 0) {
@@ -238,6 +245,10 @@ export const registerSubmissionRoutes = (
 
     if (official) {
       countQuery += " AND s.official = 1";
+    }
+
+    if (!includeFlagged) {
+      countQuery += " AND s.is_flagged = 0";
     }
 
     if (benchmarkVersions.length > 0) {
@@ -315,6 +326,8 @@ export const registerSubmissionRoutes = (
           s.usage_summary,
           s.metadata,
           s.official,
+          s.is_flagged,
+          s.flag_reason,
           CASE WHEN t.claimed_at IS NOT NULL THEN 1 ELSE 0 END as claimed,
           t.github_username
         FROM submissions s
@@ -400,6 +413,8 @@ export const registerSubmissionRoutes = (
         verified: row.claimed === 1,
         official: row.official === 1,
         verified_by: row.claimed === 1 ? (row.github_username ?? null) : null,
+        is_flagged: row.is_flagged,
+        flag_reason: row.flag_reason,
       },
       rank: rankRow?.rank ?? 0,
       total_submissions: totalRow?.total ?? 0,

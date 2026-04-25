@@ -1,6 +1,14 @@
 import type { Hono } from "hono";
 import type { Bindings, SubmissionPayload } from "../types";
-import { ensureHttps, getAuthToken, hashToken } from "../utils/security";
+import {
+  ensureHttps,
+  getAuthToken,
+  hashToken,
+  getIp,
+  checkSubmissionLimit,
+  recordSubmissionAttempt,
+} from "../utils/security";
+import { runHeuristics } from "../utils/heuristics";
 import { normalizeModelName } from "../utils/models";
 import { registerRoute } from "../utils/routeRegistry";
 
@@ -137,6 +145,24 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
       );
     }
 
+    const ip = getIp(c);
+    const { allowed, remaining } = await checkSubmissionLimit(
+      c.env.prod_pinchbench,
+      tokenRow.id,
+      ip,
+    );
+
+    if (!allowed) {
+      return c.json(
+        {
+          status: "error",
+          error: "rate_limited",
+          message: "Too many submissions (50 per 24h limit reached)",
+        },
+        429,
+      );
+    }
+
     const contentLength = Number(c.req.header("Content-Length") ?? 0);
     if (contentLength > 1024 * 1024) {
       return c.json(
@@ -214,6 +240,18 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
       );
     }
 
+    const heuristicResult = runHeuristics(payload);
+    if (!heuristicResult.isValid) {
+      return c.json(
+        {
+          status: "error",
+          error: "validation_failed",
+          details: [heuristicResult.reason ?? "Heuristic validation failed"],
+        },
+        422,
+      );
+    }
+
     // Normalize model name (strip "openrouter/" prefix)
     const normalizedModel = normalizeModelName(payload.model);
 
@@ -254,23 +292,8 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
       existing?.score_percentage ?? computedScorePercentage;
 
     if (!existing) {
-      const dailyCountRow = await c.env.prod_pinchbench
-        .prepare(
-          "SELECT COUNT(*) as total FROM submissions WHERE token_id = ? AND created_at >= datetime('now', '-1 day')",
-        )
-        .bind(tokenRow.id)
-        .first<{ total: number }>();
-
-      if ((dailyCountRow?.total ?? 0) >= 100) {
-        return c.json(
-          {
-            status: "error",
-            error: "rate_limited",
-            message: "Too many submissions for this token",
-          },
-          429,
-        );
-      }
+      // Record rate limit attempt
+      await recordSubmissionAttempt(c.env.prod_pinchbench, tokenRow.id, ip);
 
       await c.env.prod_pinchbench
         .prepare(
@@ -296,9 +319,11 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
             usage_summary,
             metadata,
             official,
+            is_flagged,
+            flag_reason,
             created_at
           ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')
           )`,
         )
         .bind(
@@ -323,6 +348,8 @@ export const registerResultsRoutes = (app: Hono<{ Bindings: Bindings }>) => {
           JSON.stringify(payload.usage_summary ?? null),
           JSON.stringify(payload.metadata ?? null),
           isOfficial,
+          heuristicResult.isFlagged ? 1 : 0,
+          heuristicResult.reason ?? null,
         )
         .run();
 

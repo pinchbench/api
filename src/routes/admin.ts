@@ -176,7 +176,7 @@ admin.get("/api/submissions", async (c) => {
     c.env.prod_pinchbench
       .prepare(
         `SELECT 
-          s.id, s.model, s.provider, s.score_percentage, s.benchmark_version, s.timestamp, s.official
+          s.id, s.model, s.provider, s.score_percentage, s.benchmark_version, s.timestamp, s.official, s.is_flagged, s.flag_reason
         FROM submissions s
         ${officialWhere}
         ORDER BY s.timestamp DESC
@@ -191,6 +191,8 @@ admin.get("/api/submissions", async (c) => {
         benchmark_version: string | null;
         timestamp: string;
         official: number;
+        is_flagged: number;
+        flag_reason: string | null;
       }>(),
     c.env.prod_pinchbench
       .prepare(`SELECT COUNT(*) as count FROM submissions s ${officialWhere}`)
@@ -343,6 +345,47 @@ admin.post("/api/submissions/:id/official", async (c) => {
   );
 
   return c.json({ success: true, official: body.official });
+});
+
+/**
+ * POST /admin/api/submissions/:id/flag
+ * Toggle flagged status on a submission
+ */
+admin.post("/api/submissions/:id/flag", async (c) => {
+  const id = c.req.param("id");
+  let body: { flagged: boolean; reason?: string };
+  try {
+    body = await c.req.json<{ flagged: boolean; reason?: string }>();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+  const user = getAdminUser(c);
+
+  const existing = await c.env.prod_pinchbench
+    .prepare("SELECT id, is_flagged FROM submissions WHERE id = ?")
+    .bind(id)
+    .first<{ id: string; is_flagged: number }>();
+
+  if (!existing) {
+    return c.json({ error: "Submission not found" }, 404);
+  }
+
+  const newValue = body.flagged ? 1 : 0;
+  const reason = body.reason || (body.flagged ? "Manually flagged by admin" : null);
+
+  await c.env.prod_pinchbench
+    .prepare("UPDATE submissions SET is_flagged = ?, flag_reason = ? WHERE id = ?")
+    .bind(newValue, reason, id)
+    .run();
+
+  await logAdminAction(
+    c.env.prod_pinchbench,
+    user?.email ?? "unknown",
+    "toggle_submission_flagged",
+    { submission_id: id, flagged: body.flagged, reason },
+  );
+
+  return c.json({ success: true, flagged: body.flagged, reason });
 });
 
 // ============================================================================
