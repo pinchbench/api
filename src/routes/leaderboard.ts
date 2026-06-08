@@ -7,6 +7,82 @@ import {
 import { getModelMetadata } from "../utils/modelMetadata";
 import { registerRoute } from "../utils/routeRegistry";
 
+export const buildLeaderboardQuery = ({
+  verifiedFlag,
+  officialFlag,
+  providerFilter,
+  benchmarkVersions,
+  limit,
+}: {
+  verifiedFlag: number;
+  officialFlag: number;
+  providerFilter?: string;
+  benchmarkVersions: string[];
+  limit: number;
+}) => {
+  const versionFilter = appendBenchmarkVersionFilter(
+    "AND",
+    "s.benchmark_version",
+    benchmarkVersions,
+  );
+
+  let query = `
+    WITH eligible_submissions AS (
+      SELECT s.*
+      FROM submissions s
+      JOIN tokens t ON s.token_id = t.id
+      WHERE (? = 0 OR t.claimed_at IS NOT NULL)
+        AND (? = 0 OR s.official = 1)
+        ${versionFilter}
+    ),
+    ranked_best AS (
+      SELECT
+        id,
+        model,
+        ROW_NUMBER() OVER (
+          PARTITION BY model
+          ORDER BY score_percentage DESC, timestamp DESC, id ASC
+        ) as best_rank
+      FROM eligible_submissions
+    )
+    SELECT
+      s.model,
+      s.provider,
+      MAX(s.score_percentage) as best_score_percentage,
+      AVG(s.score_percentage) as average_score_percentage,
+      AVG(s.total_execution_time_seconds) as average_execution_time_seconds,
+      MIN(s.total_execution_time_seconds) as best_execution_time_seconds,
+      AVG(s.total_cost_usd) as average_cost_usd,
+      MIN(s.total_cost_usd) as best_cost_usd,
+      COUNT(*) as submission_count,
+      MAX(s.timestamp) as latest_submission,
+      rb.id as best_submission_id
+    FROM eligible_submissions s
+    JOIN ranked_best rb ON rb.model = s.model AND rb.best_rank = 1
+    WHERE 1 = 1
+  `;
+
+  const bindings: (string | number)[] = [
+    verifiedFlag,
+    officialFlag,
+    ...benchmarkVersions,
+  ];
+
+  if (providerFilter) {
+    query += " AND s.provider = ?";
+    bindings.push(providerFilter);
+  }
+
+  query += `
+    GROUP BY s.model
+    ORDER BY best_score_percentage DESC, submission_count DESC
+    LIMIT ?
+  `;
+  bindings.push(limit);
+
+  return { query, bindings };
+};
+
 registerRoute({
   method: "GET",
   path: "/api/leaderboard",
@@ -126,67 +202,15 @@ export const registerLeaderboardRoutes = (
     const limitParam = parseInt(c.req.query("limit") ?? "50", 10);
     const limit = Math.min(Math.max(1, limitParam), 200);
 
-    let query = `
-      SELECT 
-        s.model,
-        s.provider,
-        MAX(s.score_percentage) as best_score_percentage,
-        AVG(s.score_percentage) as average_score_percentage,
-        AVG(s.total_execution_time_seconds) as average_execution_time_seconds,
-        MIN(s.total_execution_time_seconds) as best_execution_time_seconds,
-        AVG(s.total_cost_usd) as average_cost_usd,
-        MIN(s.total_cost_usd) as best_cost_usd,
-        COUNT(*) as submission_count,
-        MAX(s.timestamp) as latest_submission,
-        (
-          SELECT s2.id 
-          FROM submissions s2 
-          JOIN tokens t2 ON s2.token_id = t2.id
-          WHERE s2.model = s.model 
-            AND (? = 0 OR t2.claimed_at IS NOT NULL)
-            AND (? = 0 OR s2.official = 1)
-          ORDER BY s2.score_percentage DESC, s2.timestamp DESC, s2.id ASC
-          LIMIT 1
-        ) as best_submission_id
-      FROM submissions s
-      JOIN tokens t ON s.token_id = t.id
-      WHERE (? = 0 OR t.claimed_at IS NOT NULL)
-        AND (? = 0 OR s.official = 1)
-    `;
-
-    const bindings: (string | number)[] = [verifiedFlag, officialFlag];
-
-    if (benchmarkVersions.length > 0) {
-      query = query.replace(
-        "ORDER BY s2.score_percentage DESC",
-        `AND s2.benchmark_version IN (${benchmarkVersions
-          .map(() => "?")
-          .join(", ")}) ORDER BY s2.score_percentage DESC`,
-      );
-      query += appendBenchmarkVersionFilter(
-        "AND",
-        "s.benchmark_version",
-        benchmarkVersions,
-      );
-      bindings.push(...benchmarkVersions);
-    }
-
-    if (providerFilter) {
-      query += " AND s.provider = ?";
-    }
-
-    query += `
-      GROUP BY s.model
-      ORDER BY best_score_percentage DESC, submission_count DESC
-      LIMIT ?
-    `;
-    bindings.push(
+    // Rank each eligible submission once instead of rescanning submissions once
+    // per model group for best_submission_id; this removes the D1 read amplifier.
+    const { query, bindings } = buildLeaderboardQuery({
       verifiedFlag,
       officialFlag,
-      ...benchmarkVersions,
-      ...(providerFilter ? [providerFilter] : []),
       limit,
-    );
+      providerFilter,
+      benchmarkVersions,
+    });
 
     const results = await c.env.prod_pinchbench
       .prepare(query)
