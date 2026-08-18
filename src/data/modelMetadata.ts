@@ -44,6 +44,13 @@ export const MODEL_METADATA = [
       "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
   },
   {
+    model: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    provider: "nvidia",
+    weights: "Open",
+    hf_link:
+      "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+  },
+  {
     model: "anthropic/claude-opus-4.5",
     provider: "anthropic",
     weights: "Closed",
