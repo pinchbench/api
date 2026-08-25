@@ -11,6 +11,8 @@ npm run dev
 npm run deploy
 ```
 
+Pushes to `main` automatically deploy the Cloudflare Worker after the test suite passes.
+
 [For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
 
 ```txt
