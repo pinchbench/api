@@ -277,9 +277,35 @@ export const adminHTML = `<!DOCTYPE html>
     // Set initial tab from URL hash
     switchTab(getTabFromHash());
 
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Keep IDs in inert attributes rather than executable inline handlers.
+    document.addEventListener('click', event => {
+      const button = event.target.closest('[data-action]');
+      if (!button) return;
+      const id = button.dataset.id;
+      switch (button.dataset.action) {
+        case 'toggle-current': toggleCurrent(id, button.dataset.value === 'true'); break;
+        case 'toggle-hidden': toggleHidden(id, button.dataset.value === 'true'); break;
+        case 'toggle-official': toggleSubmissionOfficial(id, button.dataset.value === 'true'); break;
+        case 'delete-submission': deleteSubmission(id); break;
+        case 'copy-token': copyToken(id, button); break;
+        case 'confirm-token': confirmToken(id); break;
+        case 'unconfirm-token': unconfirmToken(id); break;
+      }
+    });
+
     function showAlert(message, type = 'success') {
       const alert = document.getElementById('alert');
-      alert.innerHTML = '<div class="' + type + '">' + message + '</div>';
+      alert.innerHTML = '<div class="' + (type === 'error' ? 'error' : 'success') + '">' + escapeHtml(message) + '</div>';
       setTimeout(() => alert.innerHTML = '', 5000);
     }
 
@@ -319,7 +345,7 @@ export const adminHTML = `<!DOCTYPE html>
         allVersions = data.versions;
         filterVersions();
       } catch (err) {
-        document.getElementById('versions-content').innerHTML = '<div class="error">' + err.message + '</div>';
+        document.getElementById('versions-content').innerHTML = '<div class="error">' + escapeHtml(err.message) + '</div>';
       }
     }
 
@@ -362,13 +388,13 @@ export const adminHTML = `<!DOCTYPE html>
         const current = v.is_current ? '<span class="badge badge-green">Current</span>' : '';
         const hidden = v.is_hidden ? '<span class="badge badge-red">Hidden</span>' : '';
         html += '<tr>';
-        html += '<td class="mono">' + v.id + '</td>';
+        html += '<td class="mono">' + escapeHtml(v.id) + '</td>';
         html += '<td>' + new Date(v.created_at).toLocaleDateString() + '</td>';
-        html += '<td>' + v.submission_count + '</td>';
+        html += '<td>' + escapeHtml(v.submission_count) + '</td>';
         html += '<td>' + current + ' ' + hidden + '</td>';
         html += '<td>';
-        html += '<button class="btn ' + (v.is_current ? 'btn-secondary' : 'btn-primary') + '" onclick="toggleCurrent(\\'' + v.id + '\\', ' + !v.is_current + ')">' + (v.is_current ? 'Remove Current' : 'Set Current') + '</button> ';
-        html += '<button class="btn btn-secondary" onclick="toggleHidden(\\'' + v.id + '\\', ' + !v.is_hidden + ')">' + (v.is_hidden ? 'Unhide' : 'Hide') + '</button>';
+        html += '<button class="btn ' + (v.is_current ? 'btn-secondary' : 'btn-primary') + '" data-action="toggle-current" data-id="' + escapeHtml(v.id) + '" data-value="' + !v.is_current + '">' + (v.is_current ? 'Remove Current' : 'Set Current') + '</button> ';
+        html += '<button class="btn btn-secondary" data-action="toggle-hidden" data-id="' + escapeHtml(v.id) + '" data-value="' + !v.is_hidden + '">' + (v.is_hidden ? 'Unhide' : 'Hide') + '</button>';
         html += '</td></tr>';
       });
       html += '</tbody></table>';
@@ -377,7 +403,7 @@ export const adminHTML = `<!DOCTYPE html>
 
     async function toggleCurrent(id, current) {
       try {
-        await api('/versions/' + id, {
+        await api('/versions/' + encodeURIComponent(id), {
           method: 'PUT',
           body: JSON.stringify({ current: current })
         });
@@ -390,7 +416,7 @@ export const adminHTML = `<!DOCTYPE html>
 
     async function toggleHidden(id, hidden) {
       try {
-        await api('/versions/' + id, {
+        await api('/versions/' + encodeURIComponent(id), {
           method: 'PUT',
           body: JSON.stringify({ hidden: hidden })
         });
@@ -442,7 +468,7 @@ export const adminHTML = `<!DOCTYPE html>
         totalSubmissions = data.total;
         filterSubmissions();
       } catch (err) {
-        document.getElementById('submissions-content').innerHTML = '<div class="error">' + err.message + '</div>';
+        document.getElementById('submissions-content').innerHTML = '<div class="error">' + escapeHtml(err.message) + '</div>';
       }
     }
 
@@ -495,20 +521,20 @@ export const adminHTML = `<!DOCTYPE html>
       
       submissions.forEach(s => {
         html += '<tr>';
-        html += '<td class="mono"><a href="https://pinchbench.com/submission/' + s.id + '" target="_blank" rel="noopener" style="color: #79c0ff; text-decoration: none;">' + s.id.slice(0, 8) + '...</a></td>';
-        html += '<td>' + s.model + '</td>';
-        html += '<td>' + (s.provider || '-') + '</td>';
+        html += '<td class="mono"><a href="https://pinchbench.com/submission/' + encodeURIComponent(s.id) + '" target="_blank" rel="noopener" style="color: #79c0ff; text-decoration: none;">' + escapeHtml(s.id.slice(0, 8)) + '...</a></td>';
+        html += '<td>' + escapeHtml(s.model) + '</td>';
+        html += '<td>' + escapeHtml(s.provider || '-') + '</td>';
         html += '<td>' + (s.score_percentage * 100).toFixed(1) + '%</td>';
         html += '<td>' + (s.official ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-gray">No</span>') + '</td>';
-        html += '<td class="mono">' + (s.benchmark_version || '-') + '</td>';
+        html += '<td class="mono">' + escapeHtml(s.benchmark_version || '-') + '</td>';
         html += '<td>' + new Date(s.timestamp).toLocaleDateString() + '</td>';
         html += '<td>';
         if (s.official) {
-          html += '<button class="btn btn-secondary" onclick="toggleSubmissionOfficial(\\'' + s.id + '\\', false)">Mark Unofficial</button> ';
+          html += '<button class="btn btn-secondary" data-action="toggle-official" data-id="' + escapeHtml(s.id) + '" data-value="false">Mark Unofficial</button> ';
         } else {
-          html += '<button class="btn btn-primary" onclick="toggleSubmissionOfficial(\\'' + s.id + '\\', true)">Mark Official</button> ';
+          html += '<button class="btn btn-primary" data-action="toggle-official" data-id="' + escapeHtml(s.id) + '" data-value="true">Mark Official</button> ';
         }
-        html += '<button class="btn btn-danger" onclick="deleteSubmission(\\'' + s.id + '\\')">Delete</button>';
+        html += '<button class="btn btn-danger" data-action="delete-submission" data-id="' + escapeHtml(s.id) + '">Delete</button>';
         html += '</td>';
         html += '</tr>';
       });
@@ -533,7 +559,7 @@ export const adminHTML = `<!DOCTYPE html>
     async function deleteSubmission(id) {
       if (!confirm('Are you sure you want to delete submission ' + id + '?')) return;
       try {
-        await api('/submissions/' + id, { method: 'DELETE' });
+        await api('/submissions/' + encodeURIComponent(id), { method: 'DELETE' });
         showAlert('Submission deleted');
         loadSubmissions(currentSubmissionsPage);
       } catch (err) {
@@ -543,7 +569,7 @@ export const adminHTML = `<!DOCTYPE html>
 
     async function toggleSubmissionOfficial(id, official) {
       try {
-        await api('/submissions/' + id + '/official', {
+        await api('/submissions/' + encodeURIComponent(id) + '/official', {
           method: 'POST',
           body: JSON.stringify({ official: official })
         });
@@ -589,7 +615,7 @@ export const adminHTML = `<!DOCTYPE html>
         allModels = data.models;
         filterModels();
       } catch (err) {
-        document.getElementById('models-content').innerHTML = '<div class="error">' + err.message + '</div>';
+        document.getElementById('models-content').innerHTML = '<div class="error">' + escapeHtml(err.message) + '</div>';
       }
     }
 
@@ -608,17 +634,6 @@ export const adminHTML = `<!DOCTYPE html>
     }
 
     function renderModels(models) {
-      // Simple HTML-escaping to prevent XSS when rendering model data
-      function escapeHtml(value) {
-        if (value === null || value === undefined) return '';
-        return String(value)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-      }
-
       if (!models.length) {
         const query = document.getElementById('models-search').value;
         document.getElementById('models-content').innerHTML = query
@@ -705,7 +720,7 @@ export const adminHTML = `<!DOCTYPE html>
         totalTokens = data.total;
         filterTokens();
       } catch (err) {
-        document.getElementById('tokens-content').innerHTML = '<div class="error">' + err.message + '</div>';
+        document.getElementById('tokens-content').innerHTML = '<div class="error">' + escapeHtml(err.message) + '</div>';
       }
     }
 
@@ -750,17 +765,17 @@ export const adminHTML = `<!DOCTYPE html>
           ? '<span class="badge badge-green">Claimed</span>' 
           : (t.claim_code ? '<span class="badge badge-gray">Pending</span>' : '<span class="badge badge-gray">Unclaimed</span>');
         html += '<tr>';
-        html += '<td class="mono">' + t.id.slice(0, 8) + '...</td>';
+        html += '<td class="mono">' + escapeHtml(t.id.slice(0, 8)) + '...</td>';
         html += '<td>' + new Date(t.created_at).toLocaleDateString() + '</td>';
         html += '<td>' + (t.last_used_at ? new Date(t.last_used_at).toLocaleDateString() : '-') + '</td>';
-        html += '<td>' + t.submission_count + '</td>';
+        html += '<td>' + escapeHtml(t.submission_count) + '</td>';
         html += '<td>' + status + '</td>';
         html += '<td>';
-        html += '<button class="btn btn-copy" id="copy-btn-' + t.id.slice(0, 8) + '" onclick="copyToken(\\'' + t.id + '\\', this)">Copy</button> ';
+        html += '<button class="btn btn-copy" data-action="copy-token" data-id="' + escapeHtml(t.id) + '">Copy</button> ';
         if (!t.claimed_at) {
-          html += '<button class="btn btn-primary" onclick="confirmToken(\\'' + t.id + '\\')">Confirm</button>';
+          html += '<button class="btn btn-primary" data-action="confirm-token" data-id="' + escapeHtml(t.id) + '">Confirm</button>';
         } else {
-          html += '<button class="btn btn-secondary" onclick="unconfirmToken(\\'' + t.id + '\\')">Unconfirm</button>';
+          html += '<button class="btn btn-secondary" data-action="unconfirm-token" data-id="' + escapeHtml(t.id) + '">Unconfirm</button>';
         }
         html += '</td>';
         html += '</tr>';
@@ -815,7 +830,7 @@ export const adminHTML = `<!DOCTYPE html>
     async function confirmToken(id) {
       if (!confirm('Confirm token ' + id + '? This will mark it as claimed.')) return;
       try {
-        await api('/tokens/' + id + '/confirm', { method: 'POST' });
+        await api('/tokens/' + encodeURIComponent(id) + '/confirm', { method: 'POST' });
         showAlert('Token confirmed');
         loadTokens(currentTokensPage);
       } catch (err) {
@@ -826,7 +841,7 @@ export const adminHTML = `<!DOCTYPE html>
     async function unconfirmToken(id) {
       if (!confirm('Unconfirm token ' + id + '? This will remove claimed status.')) return;
       try {
-        await api('/tokens/' + id + '/unconfirm', { method: 'POST' });
+        await api('/tokens/' + encodeURIComponent(id) + '/unconfirm', { method: 'POST' });
         showAlert('Token unconfirmed');
         loadTokens(currentTokensPage);
       } catch (err) {
@@ -871,7 +886,7 @@ export const adminHTML = `<!DOCTYPE html>
         totalUsers = data.total;
         filterUsers();
       } catch (err) {
-        document.getElementById('users-content').innerHTML = '<div class="error">' + err.message + '</div>';
+        document.getElementById('users-content').innerHTML = '<div class="error">' + escapeHtml(err.message) + '</div>';
       }
     }
 
@@ -912,9 +927,9 @@ export const adminHTML = `<!DOCTYPE html>
       
       users.forEach(u => {
         html += '<tr>';
-        html += '<td><strong>' + u.github_username + '</strong></td>';
-        html += '<td>' + u.submission_count + '</td>';
-        html += '<td>' + u.token_count + '</td>';
+        html += '<td><strong>' + escapeHtml(u.github_username) + '</strong></td>';
+        html += '<td>' + escapeHtml(u.submission_count) + '</td>';
+        html += '<td>' + escapeHtml(u.token_count) + '</td>';
         html += '<td>' + (u.first_seen ? new Date(u.first_seen).toLocaleDateString() : '-') + '</td>';
         html += '<td>' + (u.last_active ? new Date(u.last_active).toLocaleDateString() : '-') + '</td>';
         html += '<td><a href="https://github.com/' + encodeURIComponent(u.github_username) + '" target="_blank" rel="noopener" class="btn btn-secondary">GitHub ↗</a></td>';
