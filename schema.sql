@@ -67,7 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_token_registration_limits_ip ON token_registratio
 CREATE INDEX IF NOT EXISTS idx_token_registration_limits_created_at ON token_registration_limits(created_at);
 CREATE INDEX IF NOT EXISTS idx_benchmark_versions_semver ON benchmark_versions(semver);
 
--- Raw POST request logging for debugging
+-- Admin action audit logs (legacy raw POST entries are removed by migration)
 CREATE TABLE IF NOT EXISTS raw_post_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   method TEXT NOT NULL,
